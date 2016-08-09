@@ -1,0 +1,34 @@
+set_io LED0 B5
+set_io LED1 B4
+set_io LED2 A2
+set_io LED3 A1
+set_io LED4 C5
+set_io LED5 C4
+set_io LED6 B3
+set_io LED7 C3
+set_io pclk J3
+set_io reset A16
+#set_io TXD B12
+#set_io RXD B10
+
+set_io hsync C16
+set_io vsync B16
+set_io blue D16
+set_io red D14
+set_io green1 E16
+set_io green2 D15
+
+set_io shift_key F16
+set_io ctrl_key E14
+set_io key_col5 G16
+set_io key_col4 F15
+set_io key_col3 H16
+set_io key_col2 G15
+set_io key_col1 J15
+set_io key_col0 H14
+set_io rept_key G14
+
+set_io key_row3 K14
+set_io key_row2 J14
+set_io key_row1 K15
+set_io key_row0 K16
