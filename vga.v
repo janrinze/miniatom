@@ -54,6 +54,8 @@ reg [3:0] rgb;
 reg [12:0]char_addr; // will be used for retrieving video data as well as text char lookups
 reg [7:0] curpixeldat;
 
+reg [5:0] charmap[96*7];
+
 wire hor_valid    = ~hor_counter[9];
 wire vert_valid   = (vert_counter[9:8]==3) ? 0 : 1;
 wire hor_restart  = hor_counter == 671;
@@ -78,20 +80,22 @@ always@(posedge clk) begin
 		rgb<=0;
 	end else begin
 		if (hor_restart ) begin
-		   hor_counter <= 0;
-		   curpixeldat <= data;
-		   if (vert_restart)
-		       vert_counter <= 0;
-		   else
-		       vert_counter <= vert_counter + 1;
-		end else begin
-		   hor_counter <= hor_counter + 1;
-			if (hor_counter[1:0]==3) begin
-				pixel <= ~curpixeldat[0];
-				curpixeldat <= {0,curpixeldat[6:0]}; //shift_right
-			end else
-				if (hor_counter[4:0]==5'b11111) curpixeldat <= data;
-		end    
+		    hor_counter <= 0;
+		    curpixeldat <= data;
+		    if (vert_restart)
+		        vert_counter <= 0;
+		    else
+		        vert_counter <= vert_counter + 1;
+		end
+		else begin
+		    hor_counter <= hor_counter + 1;
+		    if (hor_counter[3:0]==4'b0000) curpixeldat <= data;
+		    else if (hor_counter[0]==1'b0) 
+				curpixeldat <= {0,curpixeldat[7:1]}; //shift_right
+		
+		end
+		
+		pixel <= (~curpixeldat[0])  & hor_valid & vert_valid;     
 		if (hs_start)
 		   h_sync <=0;
 		else if (hs_stop)
@@ -100,9 +104,7 @@ always@(posedge clk) begin
 		   v_sync <=0;
 		else if (vs_stop)
 		   v_sync <=1;
-		
-		rgb<={ hor_counter[0], hor_counter[9], pixel&hor_valid, h_sync};
-		
+			
 	end	
 end
 
@@ -111,9 +113,9 @@ assign address = {vert_counter[9:2],hor_counter[8:4]};
 assign hsync = h_sync & v_sync;
 assign vsync = v_sync;
 
-assign blue = rgb[3];
-assign red  = rgb[2];
-assign green1 = rgb[1];
-assign green2 = rgb[0];
+assign blue = pixel;
+assign red  = pixel;
+assign green1 = pixel;
+assign green2 = pixel;
 
 endmodule

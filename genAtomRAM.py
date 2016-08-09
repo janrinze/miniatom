@@ -60,9 +60,9 @@ def write_ROM(romname,file_name,base_address,rom_size):
     for address in range(base_address,base_address+rom_size,512):
         write_ram_512byte( myfile, address , romname)
         if (base_address > 0x7fff) :
-            mydecode = " ("+prefix+"address[12:9] == 7'h" + format(((address >> 9)&15),'02x') + ") ? D_IN_" + format(address,'04x') + " : " + mydecode
+            mydecode = " (latched_"+prefix+"addr[12:9] == 7'h" + format(((address >> 9)&15),'02x') + ") ? D_IN_" + format(address,'04x') + " : " + mydecode
         else:
-            mydecode = " ("+prefix+"address[15:9] == 7'h" + format((address >> 9),'02x') + ") ? D_IN_" + format(address,'04x') + " : " + mydecode
+            mydecode = " (latched_"+prefix+"addr[15:9] == 7'h" + format((address >> 9),'02x') + ") ? D_IN_" + format(address,'04x') + " : " + mydecode
     print("wire [7:0] %s_out; " %(romname))
     print(" assign %s_out = %s 0;" %(romname,mydecode))
 

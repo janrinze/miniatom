@@ -48,7 +48,7 @@ def write_ROM(romname,file_name,base_address,rom_size):
     mydecode = ""
     for address in range(base_address,base_address+rom_size,512):
         write_ram_512byte( myfile, address , romname)
-        mydecode = " (cpu_address[15:9] == 7'h" + format((address >> 9),'02x') + ") ? D_IN_" + format(address,'04x') + " : " + mydecode
+        mydecode = " (latched_cpu_addr[15:9] == 7'h" + format((address >> 9),'02x') + ") ? D_IN_" + format(address,'04x') + " : " + mydecode
     print("wire [7:0] %s_out; " %(romname))
     print(" assign %s_out = %s 0;" %(romname,mydecode))
 
@@ -65,7 +65,7 @@ def write_ROMs(romlist):
     for romname,filename,address,rom_size in romlist:
         write_ROM(romname,filename,address,rom_size)
         # we will assume that roms are always 4KB
-        mydecode = " (cpu_address[15:12] == 4'h" + format((address >> 12),'01x') + ") ? " + romname +"_out : " + mydecode
+        mydecode = " (latched_cpu_addr[15:12] == 4'h" + format((address >> 12),'01x') + ") ? " + romname +"_out : " + mydecode
     print("// always ROM_read = %s 0; " %(mydecode))
 
 write_ROMs([('MOS_ROM',"Atom_Kernel.rom",0xf000,4096),('BASIC_ROM',"Atom_Basic.rom",0xc000,4096)])

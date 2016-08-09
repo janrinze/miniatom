@@ -58,9 +58,7 @@
 
   General Idea:
 
-    1024x768 screen equals 16 Atom screens. needs 16x6k RAM thus needs external SRAM.
-
-    512x384 equals 4x ATOM 4x6 = 24 KB..
+    1024x768 screen to have ATOM screen with 4x4 pixel size.
 
     General timing
 
@@ -89,36 +87,22 @@
 
 
 
-    run 16x 6502 at 8 Mhz so each screen is rendered by individual Atom.
-
-    #b000-bfff is shared and arbitrated.
-
-    #8000-9fff has shadow.
-
-    running 16 parallel progs will enable interesting features.
-    want to know how this performs and what it can do.
-
-    16x8 = 128 Should be possible to have one single 'interlaced' CPU.
-
-    Calculate 130Mhz:
-    icepll -o 130
+    Calculate 32.5 MHz 
+    icepll -o 32.5
 
     F_PLLIN:    12.000 MHz (given)
-    F_PLLOUT:  130.000 MHz (requested)
-    F_PLLOUT:  130.500 MHz (achieved)
+    F_PLLOUT:   35.500 MHz (requested)
+    F_PLLOUT:   35.250 MHz (achieved)
 
     FEEDBACK: SIMPLE
     F_PFD:   12.000 MHz
-    F_VCO: 1044.000 MHz
+    F_VCO:  564.000 MHz
 
     DIVR:  0 (4'b0000)
     DIVF: 86 (7'b1010110)
-    DIVQ:  3 (3'b011)
+    DIVQ:  3 (3'b100)
 
     FILTER_RANGE: 1 (3'b001)
-
-    split 130 MHz over 128 cpu's? LOL!
-
 
     */
 
@@ -162,6 +146,7 @@ module top (
 
 	wire [12:0] vdu_address;
 	wire [12:0] vid_address;
+	reg  [12:0] latched_vid_addr;
 	wire 		vga_red_out,
 				vga_blue_out,
 				vga_green1_out,
@@ -325,6 +310,7 @@ module top (
     // ------------------------------------------------------------------------------------
     // MOS ROM, BASIC ROM and minimal RAM
 	// ------------------------------------------------------------------------------------
+    reg [15:0] latched_cpu_addr;
     `include "rom_file.v"
     `include "ram_areas.v"
 	// ------------------------------------------------------------------------------------		
@@ -365,7 +351,7 @@ module top (
 	// we can always go to 65MHz cpu and vdu using an interlaced clock.
 	// ------------------------------------------------------------------------------------
 
-	assign D_in = (cpu_address[15:13]==3'b100) ? VID_RAM_out : ( ZP_RAM_out | BASIC_ROM_out | MOS_ROM_out | IO_out );
+	assign D_in = (latched_cpu_addr[15:13]==3'b100) ? VID_RAM_out : ( ZP_RAM_out | BASIC_ROM_out | MOS_ROM_out | IO_out );
     assign vid_address = (cpu_address[15:13]==3'b100) ? cpu_address[12:0] : vdu_address[12:0];
 
 
@@ -374,7 +360,9 @@ module top (
 	// -------------------------------------------------------------------------------------
 
 	always@(posedge clk) begin
-		leds     <= { 2'b00,IRQ,NMI,RDY, W_en,reset,1'b1};
+		latched_cpu_addr <= cpu_address;
+		latched_vid_addr <= vid_address;
+		leds     <= { 2'b00,IRQ,NMI,(cpu_address[15:13]==3'b100), W_en,reset,1'b1};
 	end
 	assign {LED0, LED1, LED2, LED3, LED4, LED5, LED6, LED7} = leds;
 	
