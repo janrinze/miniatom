@@ -61,6 +61,7 @@ Memory map:
 It requires the verilog 6502 CPU and has the following I/O:
 
 Generic:
+
 		set_io LED0 B5
 		set_io LED1 B4
 		set_io LED2 A2
@@ -71,7 +72,9 @@ Generic:
 		set_io LED7 C3
 		set_io pclk J3
 		set_io reset A16
+
 VGA-out:
+
 		set_io hsync C16
 		set_io vsync B16
 		set_io blue D16
@@ -80,6 +83,7 @@ VGA-out:
 		set_io green2 D15
 
 KeyBoard:
+
 		set_io shift_key F16
 		set_io ctrl_key E14
 		set_io key_col5 G16
