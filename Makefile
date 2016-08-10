@@ -12,7 +12,7 @@ rom_file.v: genAtomROM.py
 	./genAtomROM.py > rom_file.v
 
 %.blif: %.v ram_areas.v rom_file.v vga.v
-	yosys -p 'synth_ice40 -top top -blif $@' $<
+	yosys -q -p 'synth_ice40 -top top -blif $@' $<
 
 %.asc: $(PIN_DEF) %.blif
 	arachne-pnr -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^

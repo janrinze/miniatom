@@ -230,7 +230,7 @@ module top (
 	assign VGAIO_select     = (cpu_address[11:10]==2'h3) ? IO_select : 0 ; // #BC00 - #BFFF is VGAIO
 
 	assign IO_wr = IO_select & W_en;
-	wire [7:0] IO_out;
+	reg [7:0] IO_out;
 
 	// ------------------------------------------------------------------------------------
 	// 	25.5 Input/Output Port Allocations
@@ -268,6 +268,7 @@ module top (
 
     reg [3:0] keyboard_row,graphics_mode,Port_C_low,Port_C_high;
     reg [7:0] keyboard_input;
+   	wire [7:0] PIO_out; 
 	always@(posedge clk) begin
 	    if (~resetq) begin
 	       graphics_mode <= 4'h0;
@@ -287,15 +288,15 @@ module top (
 	                Port_C_low <= D_out[3:0];
 	                end
 	        end
-	        
+	        IO_out <= PIO_out;
 	    end
 	   
 	end
 	assign {key_row3,key_row2,key_row1,key_row0} = keyboard_row;
-	wire [7:0] PIO_out;
+
     assign PIO_out = (PIO_select==0) ? 0 :
                     (cpu_address[1:0]==2'b00) ? { graphics_mode, keyboard_row } :
-                    (cpu_address[1:0]==2'b01) ? keyboard_input :
+                    (cpu_address[1:0]==2'b01) ? ~keyboard_input :
                     (cpu_address[1:0]==2'b10) ? { Port_C_high, Port_C_low} : 8'hFF;
     
 	// ------------------------------------------------------------------------------------
@@ -311,7 +312,10 @@ module top (
     // MOS ROM, BASIC ROM and minimal RAM
 	// ------------------------------------------------------------------------------------
     reg [15:0] latched_cpu_addr;
-    `include "rom_file.v"
+    reg [7:0] latched_D_out;
+    reg latched_W_en;
+    `include "BASIC_ROM.v"
+    `include "MOS_ROM.v"
     `include "ram_areas.v"
 	// ------------------------------------------------------------------------------------		
 	vga display(
@@ -342,7 +346,7 @@ module top (
 	// ------------------------------------------------------------------------------------
 	// collect IO outputs
 	// ------------------------------------------------------------------------------------
-    assign IO_out = PIO_out;
+    
 	// ------------------------------------------------------------------------------------
 
 	// ------------------------------------------------------------------------------------
@@ -350,19 +354,48 @@ module top (
 	// vdu_address and cpu_addres are both latched on clk so this should be fine.
 	// we can always go to 65MHz cpu and vdu using an interlaced clock.
 	// ------------------------------------------------------------------------------------
+	
+	
 
-	assign D_in = (latched_cpu_addr[15:13]==3'b100) ? VID_RAM_out : ( ZP_RAM_out | BASIC_ROM_out | MOS_ROM_out | IO_out );
     assign vid_address = (cpu_address[15:13]==3'b100) ? cpu_address[12:0] : vdu_address[12:0];
 
+	assign D_in = (latched_cpu_addr[15:13]==3'b100) ? VID_RAM_out : ( ZP_RAM_out | BASIC_ROM_out | MOS_ROM_out | IO_out );
+/*
+	reg [7:0] ROM_DAT;
+    assign D_in = (latched_cpu_addr[15:13]==3'b100) ? VID_RAM_out : ( ZP_RAM_out | BASIC_ROM_out | ROM_DAT | IO_out );
 
-
+    //reg [7:0] BASIC_ROM[0:4096];
+    reg [7:0] MOS_ROM[0:4096];
+	//wire BASIC_select  = cpu_address[15:12]==4'hC;
+	wire Kernel_select = cpu_address[15:12]==4'hF;
+	
+	//wire [7:0] BAS_ROM_dat = BASIC_ROM[cpu_address[11:0]];
+	wire [7:0] MOS_ROM_dat = MOS_ROM[cpu_address[11:0]];
+     
+    
+    initial begin
+	//	$readmemb("BASIC_ROM.list", BASIC_ROM); // memory_list is memory file
+		$readmemb("MOS_ROM.list", MOS_ROM); // memory_list is memory file
+	end
+	always@(posedge clk) begin
+	//	if (BASIC_select)
+	//		ROM_DAT <= BAS_ROM_dat;
+	//	else
+		 if (Kernel_select)
+			ROM_DAT <= MOS_ROM_dat ;
+		else ROM_DAT<=0;
+	end
+*/
 
 	// -------------------------------------------------------------------------------------
 
 	always@(posedge clk) begin
 		latched_cpu_addr <= cpu_address;
 		latched_vid_addr <= vid_address;
-		leds     <= { 2'b00,IRQ,NMI,(cpu_address[15:13]==3'b100), W_en,reset,1'b1};
+		latched_D_out <= D_out;
+		latched_W_en <= W_en;
+		leds     <= keyboard_input;
+		//leds     <=cpu_address[15:8];
 	end
 	assign {LED0, LED1, LED2, LED3, LED4, LED5, LED6, LED7} = leds;
 	
