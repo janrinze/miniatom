@@ -103,20 +103,24 @@ def to_bin(value):
 		nextc='0'
 		if (value&1):
 			nextc='1'
-		result=result+nextc;
+		result=nextc+result;
 		value=value>>1
 	return result+'\n'
 
 def dump_to_list(romname,file_name,base_address,rom_size):
 	myfile=open(file_name,'rb')
-	outfile=open(romname+".list",'w')
 	asbytes=[]
 	for address in range(0,rom_size):
 		asbytes.append(int.from_bytes(myfile.read(1), byteorder='little', signed=False))
-	for address in range(0,rom_size):
-		outfile.write(to_bin(asbytes[address]))
+	postfix=['A','B','C','D']
+	pfindex=0;
+	for offset in range(0,4096,1024):
+		outfile=open(romname+postfix[pfindex]+".list",'w')
+		pfindex=pfindex+1
+		for address in range(0,1024):
+			outfile.write(to_bin(asbytes[offset+address]))
+		outfile.close()
 	myfile.close()
-	outfile.close()
 
 def write_lists(romlist):
 	for romname,file_name,base_address,rom_size in romlist:

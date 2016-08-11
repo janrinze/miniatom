@@ -75,7 +75,7 @@ wire invert		  = textmode & data[7];
 wire c_restart    = char_line==4'b1011;
 wire next_byte    = hor_counter[3:0] == 4'b0000;
 wire next_line    = vert_counter[1:0] == 2'b11;
-reg h_sync,v_sync,pixel;
+reg h_sync,v_sync,pixel,bg,invs;
 wire [7:0] textchar   = charmap[{data[5:0],char_line }];
 
 
@@ -125,15 +125,17 @@ always@(posedge clk) begin
 		
 	    if (hor_counter[3:0]==4'b1111)
 	    begin
+	        invs <= invert;
 			if  (textmode)
 	          curpixeldat <= textchar;
 	        else
 	          curpixeldat <= data;
 	    end
 	    else if (hor_counter[0]==1'b1) 
-			curpixeldat <= {0,curpixeldat[7:1]}; //shift_right	
+			curpixeldat <= {curpixeldat[6:0],1'b0}; //shift_left	
 
-		pixel <= (invert ^ curpixeldat[0])  & hor_valid & vert_valid;     
+		pixel <= (invs ^ curpixeldat[7])  & hor_valid & vert_valid;
+		bg <= hor_valid & vert_valid;   
 		if (hs_start)
 		   h_sync <=0;
 		else if (hs_stop)
@@ -148,10 +150,10 @@ end
 
 
 assign address = (textmode) ? {4'b000,tvert_pos,hor_pos}:{ vert_pos,hor_pos};
-assign hsync = h_sync;// & v_sync;
+assign hsync = h_sync & v_sync;
 assign vsync = v_sync;
 
-assign blue = hor_valid & vert_valid;
+assign blue = bg;
 assign red  = pixel;
 assign green1 = pixel;
 assign green2 = pixel;

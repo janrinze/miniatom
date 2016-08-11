@@ -83,5 +83,5 @@ def write_ROMs(romlist):
     print("// always ROM_read = %s 0; " %(mydecode))
 
 write_ROMs([('ZP_RAM',"/dev/zero",0x0000,1024,"cpu_"),
-		('VID_RAM',"/dev/zero",0x8000,4096+2048,"vid_")])
+		('VID_RAM',"/dev/zero",0x8000,4096+2048,"vid_"),('BAS_RAM','/dev/zero',0x2800,1024,'cpu_')])
 #		,		('CHAR_RAM',"/dev/urandom",0x9800,1024,"char_")])

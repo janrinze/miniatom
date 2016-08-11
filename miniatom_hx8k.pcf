@@ -18,17 +18,24 @@ set_io red D14
 set_io green1 E16
 set_io green2 D15
 
-set_io shift_key F16
-set_io ctrl_key E14
-set_io key_col5 G16
-set_io key_col4 F15
-set_io key_col3 H16
-set_io key_col2 G15
-set_io key_col1 J15
-set_io key_col0 H14
-set_io rept_key G14
+set_io key_col0 	F16
+set_io key_col1		G16
+set_io key_col2		H16
+set_io key_col3		J15
+set_io key_col4		G14
+set_io key_col5		K14
+set_io ctrl_key		K15
+set_io shift_key 	M16
+set_io rept_key		N16
+set_io key_reset	P16
 
-set_io key_row3 K14
-set_io key_row2 J14
-set_io key_row1 K15
-set_io key_row0 K16
+set_io key_row0 	E14
+set_io key_row1		F15
+set_io key_row2		G15
+set_io key_row3		H14
+set_io key_row4		F14
+set_io key_row5		J14
+set_io key_row6		K16
+set_io key_row7		L16
+set_io key_row8		M15
+set_io key_row9		P15
