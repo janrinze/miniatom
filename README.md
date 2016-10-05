@@ -5,7 +5,9 @@ The Acorn Atom is a 1980's home computer. It requires very little resources.
 It makes a very good candidate for a minimal implementation on the HX8K.
 
 --- Work in Progress ---
+
 status:
+
 	- VGA 1024x768 vga output for text and mode 4 scaled.
 	- CPU runs and the prompt is visible
 	- fully functional keyboard.
@@ -19,32 +21,32 @@ requirements:
 
 Memory map:
 
-          Fxxx   ROM     MM52164    IC20        - onboard MOS
+	Fxxx   ROM     MM52164    IC20        - onboard MOS
 
-          Exxx   Reserved -Disk Operating System
+	Exxx   Reserved -Disk Operating System
 
-          Dxxx   ROM     MM52132    IC21
+	Dxxx   ROM     MM52132    IC21
 
-          C000   ROM     MM52164    IC20        - onboard BASIC
+	C000   ROM     MM52164    IC20        - onboard BASIC
 
-          BC00   Empty
-          B800   VIA     6522	    IC1         - timer ? N.A.
-          B400   Extension          PL8
-          B000   PPI     INS8255    IC25        - keyboard
+	BC00   Empty
+	B800   VIA     6522       IC1         - timer ? N.A.
+	B400   Extension          PL8
+	B000   PPI     INS8255    IC25        - keyboard
 
-          A000   ROM     MN52132    IC24	- mapped as memory
+	A000   ROM     MN52132    IC24        - mapped as memory
 
-	  9xxx   Video RAM                      - onboard
-          8xxx   Video RAM                      - onboard
+	9xxx   Video RAM                      - onboard
+	8xxx   Video RAM                      - onboard
 
-          0000 - 7FFF    RAM                    - onboard
+	0000 - 7FFF    RAM                    - onboard
 
 VGA output:
 
-	set_io hsync C3
-	set_io vsync B3
-	set_io blue A2
-	set_io red B6
+	set_io hsync  C3
+	set_io vsync  B3
+	set_io blue   A2
+	set_io red    B6
 	set_io green1 A5
 	set_io green2 B7
 
