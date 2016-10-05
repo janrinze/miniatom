@@ -11,8 +11,6 @@
 
 `include "../verilog-6502/cpu.v"
 
-
-
 /*  Stappen plan:
 
     1: test read/write RAM
@@ -110,20 +108,15 @@
     */
     
 `define pull_up( source , type, dest) 	wire dest;  SB_IO #(	.PIN_TYPE(6'b0000_01),.PULLUP(1'b1)	) type (.PACKAGE_PIN(source),.D_IN_0(dest));
+`define pull_N_up( source , type,num, dest) 	wire [num:0] dest;  SB_IO #(	.PIN_TYPE(6'b0000_01),.PULLUP(1'b1)	) type[num:0] (.PACKAGE_PIN(source),.D_IN_0(dest));
 
 module top (
+	// global clock
 	input  pclk,
-	input reset,
-	output LED0,
-	output LED1,
-	output LED2,
-	output LED3,
-	output LED4,
-	output LED5,
-	output LED6,
-	output LED7,
-	//input RXD,
-	//output TXD,
+	// diagnostic LEDs
+	output [7:0] LED,
+	
+	// vga output
 	output hsync,
 	output vsync,
 	output blue,
@@ -131,74 +124,63 @@ module top (
 	output green1,
 	output green2,
 	
+	
+	// keyboard
 	input shift_key,
 	input ctrl_key,
-	input key_col5,
-	input key_col4,
-	input key_col3,
-	input key_col2,
-	input key_col1,
-	input key_col0,
+	input [5:0] key_col,
 	input rept_key,
 	input key_reset,
-
-	output key_row0,
-	output key_row1,
-	output key_row2,
-	output key_row3,
-	output key_row4,
-	output key_row5,
-	output key_row6,
-	output key_row7,
-	output key_row8,
-	output key_row9
+	output [9:0] key_row,
+	
+	// SRAM i/f
+	output [18:0] SRAM_A,
+	inout [15:0] SRAM_D,
+	output SRAM_CE,
+	output SRAM_WE,
+	output SRAM_OE,
+	output SRAM_LB,
+	output SRAM_UB
 );
 
-    wire clk;
+    wire fclk;
+    reg clk;
     wire resetq;
+	reg reset=1;
 	wire [12:0] vdu_address;
 	wire [12:0] vid_address;
 	reg  [12:0] latched_vid_addr;
-	wire 		vga_red_out,
-				vga_blue_out,
-				vga_green1_out,
-				vga_green2_out,
-				vga_hsync_out,
-				vga_vsync_out;
+	wire 	vga_red_out,
+			vga_blue_out,
+			vga_green1_out,
+			vga_green2_out,
+			vga_hsync_out,
+			vga_vsync_out;
 	
-`ifdef FAST_VERSION
     SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
                   .PLLOUT_SELECT("GENCLK"),
-                  .DIVR(4'b0000),
-                  .DIVF(7'b1010110),
-                  .DIVQ(3'b101),
-                  .FILTER_RANGE(3'b001),
-                 ) uut (
-                         .REFERENCECLK(pclk),
-                         .PLLOUTCORE(clk),
-                         //.PLLOUTGLOBAL(clk),
-                         .LOCK(resetq),
-                         .RESETB(reset),
-                         .BYPASS(1'b0)
-                        );
-`else
-    SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
-                  .PLLOUT_SELECT("GENCLK"),
-                  .DIVR(4'b0000),
+                  .DIVR(4'b0100),
                   .DIVF(7'b0110011),
-                  .DIVQ(3'b101),
-                  .FILTER_RANGE(3'b001),
+                  .DIVQ(3'b100),
+                  .FILTER_RANGE(3'b010),
                  ) uut (
                          .REFERENCECLK(pclk),
-                         .PLLOUTCORE(clk),
+                         .PLLOUTCORE(fclk),
                          //.PLLOUTGLOBAL(clk),
                          .LOCK(resetq),
                          .RESETB(reset),
                          .BYPASS(1'b0)
                         );
-`endif
+
 	reg [31:0] counter = 0,counter_preset = 0;
 	reg [7:0] leds;
+	
+	
+	// fclk is 65 MHz
+	// clk is 32.5 MHz
+	always@(posedge fclk) begin
+		clk <= ~clk;
+	end
 
     // ------------------------------------------------------------------------------------
     // Main 6502 CPU
@@ -208,10 +190,13 @@ module top (
     wire [7:0] D_out;
     reg IRQ,NMI,RDY;
     wire W_en;
+    wire latch_counter;
+    reg kbd_reset;
+    wire cpu_reset = ~kbd_reset | ~resetq;
 
 	cpu main_cpu(
 	     .clk(clk),
-	     .reset(~resetq),
+	     .reset(cpu_reset),
 	     .AB(cpu_address),
 	     .DI(D_in),
 	     .DO(D_out),
@@ -222,13 +207,11 @@ module top (
     // ------------------------------------------------------------------------------------
 
 
-    wire latch_counter;
-
     // ------------------------------------------------------------------------------------
     // reset and tick counter
 	// ------------------------------------------------------------------------------------
 	always@(posedge clk) begin
-	    if (~resetq) begin
+	    if (cpu_reset) begin
 	       RDY<= 1;
 	       NMI<=0;
 	       IRQ<=0;
@@ -297,25 +280,16 @@ module top (
     reg [3:0] keyboard_row,graphics_mode,Port_C_low,Port_C_high;
     reg [7:0] keyboard_input;
    	wire [7:0] PIO_out;
-   	/* Numpad pull-up settings for columns:
-       PIN_TYPE: <output_type=0>_<input=1>
-       PULLUP: <enable=1>
-       PACKAGE_PIN: <user pad name>
-       D_IN_0: <internal pin wire (data in)>
-    */
-
     `pull_up(rept_key,  rept_key_t,		rept_keyp)
     `pull_up(shift_key, shift_keyt,		shift_keyp)
     `pull_up(ctrl_key,  ctrl_keyt,		ctrl_keyp)
-    `pull_up(key_col5,  key_col5t,		key_col5p)
-    `pull_up(key_col4,  key_col4t,		key_col4p)
-    `pull_up(key_col3,  key_col3t,		key_col3p)
-    `pull_up(key_col2,  key_col2t,key_col2p)
-    `pull_up(key_col1,  key_col1t,key_col1p)
-    `pull_up(key_col0,  key_col0t,   key_col0p)
+    `pull_N_up(key_col,  key_colt,5,		key_colp)
     `pull_up(key_reset, key_reset_t, key_reset_p)
 
-    
+	always@(posedge clk)
+		begin
+		kbd_reset <= key_reset_p;
+	end
     
 	always@(posedge clk) begin
 	    if (~resetq) begin
@@ -324,10 +298,8 @@ module top (
 	       Port_C_low <= 4'h0;
 	    end else begin
 	        // grab keyboard_input
-	        keyboard_input <= { shift_keyp, ctrl_keyp, key_col5p, key_col4p, key_col3p, key_col2p , key_col1p, key_col0p };
+	        keyboard_input <= { shift_keyp, ctrl_keyp, key_colp };
 	        Port_C_high <= { vga_vsync_out, rept_keyp, 2'b11};
-//	        keyboard_input <= { shift_key, ctrl_key, key_col5, key_col4, key_col3, key_col2 , key_col1, key_col0 };
-//	        Port_C_high <= { vga_vsync_out, rept_key, 2'b11};
 	        // latch writes to PIO
 	        if (IO_wr & PIO_select) begin
 	            if (cpu_address[1:0]==2'b00) begin
@@ -342,6 +314,8 @@ module top (
 	    end
 	   
 	end
+
+	// demux key row select
 	reg[9:0] key_demux;
 	
 	always@(keyboard_row)
@@ -360,7 +334,7 @@ module top (
 		default: key_demux=10'b1111111111;
 		endcase
 	end
-	assign {key_row9,key_row8,key_row7,key_row6,key_row5,key_row4,key_row3,key_row2,key_row1,key_row0} = key_demux;
+	assign key_row = key_demux;
 
     assign PIO_out = (PIO_select==0) ? 0 :
                     (cpu_address[1:0]==2'b00) ? { graphics_mode, keyboard_row } :
@@ -382,17 +356,16 @@ module top (
     reg [15:0] latched_cpu_addr;
     reg [7:0] latched_D_out;
     reg latched_W_en;
+    reg [7:0] vid_data;
     `include "BASIC_ROM.v"
-`ifdef MOS_BRAM
     `include "MOS_ROM.v"
-`endif
     `include "ram_areas.v"
 	// ------------------------------------------------------------------------------------		
 	vga display(
 		.clk( clk ),
 		.reset(~resetq),
 		.address(vdu_address),
-		.data(VID_RAM_out),
+		.data(vid_data),
 		.settings(graphics_mode),
 		.red(vga_red_out),
 		.blue(vga_blue_out),
@@ -429,78 +402,59 @@ module top (
 
     assign vid_address = (cpu_address[15:13]==3'b100) ? cpu_address[12:0] : vdu_address[12:0];
 
-`ifdef MOS_BRAM
-	assign D_in = (latched_cpu_addr[15:13]==3'b100) ? VID_RAM_out : ( ZP_RAM_out| BAS_RAM_out | BASIC_ROM_out | MOS_ROM_out | IO_out );
-/*
-	reg [7:0] ROM_DAT;
-    assign D_in = (latched_cpu_addr[15:13]==3'b100) ? VID_RAM_out : ( ZP_RAM_out | BASIC_ROM_out | ROM_DAT | IO_out );
+    reg [1:0] sram_state;
+    wire sram_wrlb, sram_wrub;
+    wire [18:0] sram_addr;
+    wire [15:0] sram_dout;
+    wire [15:0] sram_din;
 
-    //reg [7:0] BASIC_ROM[0:4096];
-    reg [7:0] MOS_ROM[0:4096];
-	//wire BASIC_select  = cpu_address[15:12]==4'hC;
-	wire Kernel_select = cpu_address[15:12]==4'hF;
+    SB_IO #(
+        .PIN_TYPE(6'b 1010_01),
+        .PULLUP(1'b 0)
+    ) sram_io [15:0] (
+        .PACKAGE_PIN(SRAM_D),
+        .OUTPUT_ENABLE(W_en & (~clk)),
+        .D_OUT_0(sram_dout),
+        .D_IN_0(sram_din)
+    );
+
+
+    assign SRAM_A = (clk == 1) ? { 6'b000100, vdu_address[12:0] } :{ 3'b000,cpu_address};
+
+	wire phi2_we;
 	
-	//wire [7:0] BAS_ROM_dat = BASIC_ROM[cpu_address[11:0]];
-	wire [7:0] MOS_ROM_dat = MOS_ROM[cpu_address[11:0]];
-     
-    
-    initial begin
-	//	$readmemb("BASIC_ROM.list", BASIC_ROM); // memory_list is memory file
-		$readmemb("MOS_ROM.list", MOS_ROM); // memory_list is memory file
-	end
+	assign phi2_we = W_en & ~clk;
+    assign SRAM_CE = 0;
+    assign SRAM_WE = (W_en) ? fclk & clk : 1;
+    assign SRAM_OE = (phi2_we);
+    assign SRAM_LB = (phi2_we) ? !sram_wrlb : 0;
+    assign SRAM_UB = (phi2_we) ? !sram_wrub : 0;
+    assign sram_wrlb = W_en;
+    assign sram_wrub = 0;
+    assign sram_dout = { 8'd0,D_out};
+
+	
+	reg [7:0] latch_SRAM_out;
+	reg [7:0] t_vid_data;
 	always@(posedge clk) begin
-	//	if (BASIC_select)
-	//		ROM_DAT <= BAS_ROM_dat;
-	//	else
-		 if (Kernel_select)
-			ROM_DAT <= MOS_ROM_dat ;
-		else ROM_DAT<=0;
+		vid_data <=t_vid_data;
+		if (cpu_address[15:12] < 4'hB)
+		begin
+			latch_SRAM_out <= sram_din[7:0];
+			end
+		else begin
+			latch_SRAM_out <= 8'd0;
+			end
 	end
-*/
-
-
-`else
-	reg [7:0] ROM_DAT;
-    assign D_in = (latched_cpu_addr[15:13]==3'b100) ? VID_RAM_out : ( ZP_RAM_out | BASIC_ROM_out | ROM_DAT | IO_out );
-
-    //reg [7:0] BASIC_ROM[0:4096];
-    reg [7:0] MOS_ROM_A[0:1024];
-    reg [7:0] MOS_ROM_B[0:1024];
-    reg [7:0] MOS_ROM_C[0:1024];
-    reg [7:0] MOS_ROM_D[0:1024];
-	//wire BASIC_select  = cpu_address[15:12]==4'hC;
-	wire Kernel_select = cpu_address[15:12]==4'hF;
-	wire MOS_ROM_A_select = cpu_address[11:10]==2'b00;
-	wire MOS_ROM_B_select = cpu_address[11:10]==2'b01;
-	wire MOS_ROM_C_select = cpu_address[11:10]==2'b10;
-	wire MOS_ROM_D_select = cpu_address[11:10]==2'b11;
 	
-	//wire [7:0] BAS_ROM_dat = BASIC_ROM[cpu_address[11:0]];
-	wire [7:0] MOS_ROM_A_dat = MOS_ROM_A_select ? MOS_ROM_A[cpu_address[9:0]] :0 ;
-	wire [7:0] MOS_ROM_B_dat = MOS_ROM_B_select ? MOS_ROM_B[cpu_address[9:0]]:0 ;
-	wire [7:0] MOS_ROM_C_dat = MOS_ROM_C_select ? MOS_ROM_C[cpu_address[9:0]]:0 ;
-	wire [7:0] MOS_ROM_D_dat = MOS_ROM_D_select ? MOS_ROM_D[cpu_address[9:0]]:0 ;
-      
-    // try the OR
-    // 
-    initial begin
-	//	$readmemb("BASIC_ROM.list", BASIC_ROM); // memory_list is memory file
-		$readmemb("MOS_ROMA.list", MOS_ROM_A); // memory_list is memory file
-		$readmemb("MOS_ROMB.list", MOS_ROM_B); // memory_list is memory file
-		$readmemb("MOS_ROMC.list", MOS_ROM_C); // memory_list is memory file
-		$readmemb("MOS_ROMD.list", MOS_ROM_D); // memory_list is memory file
-	end
-	always@(posedge clk) begin
-	//	if (BASIC_select)
-	//		ROM_DAT <= BAS_ROM_dat;
-	//	else
-		 if (Kernel_select)
-			ROM_DAT<=MOS_ROM_A_dat|MOS_ROM_B_dat|MOS_ROM_C_dat|MOS_ROM_D_dat;
-		else ROM_DAT<=0;
-	end
-`endif
+	always@(negedge clk) begin
+		t_vid_data <= sram_din[7:0];
+		end
 	
-	// -------------------------------------------------------------------------------------
+
+	assign D_in =  ( latch_SRAM_out| BASIC_ROM_out | MOS_ROM_out | IO_out );
+	
+	// -------------------------------------------------------------------------------------ZP_RAM_out|(latched_cpu_addr[15:13]==3'b100) ? VID_RAM_out :
 
 	always@(posedge clk) begin
 		if (RDY)
@@ -511,8 +465,7 @@ module top (
 		   latched_W_en <= W_en;
 		end
 		leds     <= keyboard_input;
-		//leds     <=cpu_address[15:8];
 	end
-	assign {LED0, LED1, LED2, LED3, LED4, LED5, LED6, LED7} = leds;
+	assign LED = leds;
 	
 endmodule

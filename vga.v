@@ -53,7 +53,7 @@ reg [3:0] char_line;
 reg [4:0] hor_pos;
 reg [7:0] vert_pos;
 reg [3:0] tvert_pos;
-reg [7:0] charmap[0:1024];
+reg [7:0] charmap[0:1023];
 
 initial begin
     $readmemb("charmap.list", charmap); // memory_list is memory file

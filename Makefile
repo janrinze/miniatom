@@ -11,7 +11,7 @@ ram_areas.v: genAtomRAM.py
 rom_file.v: genAtomROM.py
 	./genAtomROM.py > rom_file.v
 
-%.blif: %.v ram_areas.v rom_file.v vga.v
+%.blif: %.v ram_areas.v rom_file.v vga.v charmap.list
 	yosys -q -p 'synth_ice40 -top top -blif $@' $<
 
 %.asc: $(PIN_DEF) %.blif
