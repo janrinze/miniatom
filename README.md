@@ -25,7 +25,7 @@ Memory map:
 
 	Exxx   Reserved -Disk Operating System
 
-	Dxxx   ROM     MM52132    IC21
+	Dxxx   ROM     MM52132    IC21        - onboard FP-ROM
 
 	C000   ROM     MM52164    IC20        - onboard BASIC
 
@@ -34,7 +34,7 @@ Memory map:
 	B400   Extension          PL8
 	B000   PPI     INS8255    IC25        - keyboard
 
-	A000   ROM     MN52132    IC24        - mapped as memory
+	A000   ROM     MN52132    IC24        - onboard P-Charme
 
 	9xxx   Video RAM                      - onboard
 	8xxx   Video RAM                      - onboard
