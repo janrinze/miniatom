@@ -126,5 +126,5 @@ def write_lists(romlist):
 	for romname,file_name,base_address,rom_size in romlist:
 		dump_to_list(romname,file_name,base_address,rom_size)
 
-write_lists([('MOS_ROM',"Atom_Kernel.rom",0xf000,4096),('BASIC_ROM',"Atom_Basic.rom",0xc000,4096)])
-write_ROMs([('MOS_ROM',"Atom_Kernel.rom",0xf000,4096),('BASIC_ROM',"Atom_Basic.rom",0xc000,4096)])
+#write_lists([('MOS_ROM',"Atom_Kernel.rom",0xf000,4096),('BASIC_ROM',"Atom_Basic.rom",0xc000,4096)])
+write_ROMs([('MOS_ROM',"Atom_Kernel.rom",0xf000,4096),('BASIC_ROM',"Atom_Basic.rom",0xc000,4096),('PCHARME_ROM','pcharme.rom',0xa000,4096),('FP_ROM','floatingpoint.rom',0xd000,4096)])

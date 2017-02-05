@@ -359,8 +359,9 @@ module top (
     reg [7:0] vid_data;
     `include "BASIC_ROM.v"
     `include "MOS_ROM.v"
-    `include "ram_areas.v"
-	// ------------------------------------------------------------------------------------		
+    `include "PCHARME_ROM.v"
+    `include "FP_ROM.v"
+    // ------------------------------------------------------------------------------------		
 	vga display(
 		.clk( clk ),
 		.reset(~resetq),
@@ -413,6 +414,7 @@ module top (
         .PULLUP(1'b 0)
     ) sram_io [15:0] (
         .PACKAGE_PIN(SRAM_D),
+	// --- 100 MHz memory with OE during PHI2 ---
         .OUTPUT_ENABLE(W_en & (~clk)),
         .D_OUT_0(sram_dout),
         .D_IN_0(sram_din)
@@ -421,9 +423,9 @@ module top (
 
     assign SRAM_A = (clk == 1) ? { 6'b000100, vdu_address[12:0] } :{ 3'b000,cpu_address};
 
-	wire phi2_we;
+    wire phi2_we;
 	
-	assign phi2_we = W_en & ~clk;
+    assign phi2_we = W_en & ~clk;
     assign SRAM_CE = 0;
     assign SRAM_WE = (W_en) ? fclk & clk : 1;
     assign SRAM_OE = (phi2_we);
@@ -434,27 +436,33 @@ module top (
     assign sram_dout = { 8'd0,D_out};
 
 	
-	reg [7:0] latch_SRAM_out;
-	reg [7:0] t_vid_data;
-	always@(posedge clk) begin
+    reg [7:0] latch_SRAM_out;
+    reg [7:0] t_vid_data;
+
+    // --------- data bus latches ---------
+    always@(posedge clk) begin
 		vid_data <=t_vid_data;
-		if (cpu_address[15:12] < 4'hB)
+		if (cpu_address[15:12] < 4'hA)
 		begin
 			latch_SRAM_out <= sram_din[7:0];
 			end
 		else begin
 			latch_SRAM_out <= 8'd0;
 			end
-	end
+    end
 	
-	always@(negedge clk) begin
+
+    // --------- phase delayed -----------    
+    always@(negedge clk) begin
 		t_vid_data <= sram_din[7:0];
 		end
 	
 
-	assign D_in =  ( latch_SRAM_out| BASIC_ROM_out | MOS_ROM_out | IO_out );
+    // --------- collect the databus from all connected devices ----------------------------
+
+    assign D_in =  ( latch_SRAM_out| BASIC_ROM_out | MOS_ROM_out | IO_out | PCHARME_ROM_out | FP_ROM_out );
 	
-	// -------------------------------------------------------------------------------------ZP_RAM_out|(latched_cpu_addr[15:13]==3'b100) ? VID_RAM_out :
+    // -------------------------------------------------------------------------------------
 
 	always@(posedge clk) begin
 		if (RDY)

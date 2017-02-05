@@ -31,6 +31,8 @@
 
 */
 
+`include "charGen.v"
+
 module 	vga (
 		input clk,
 		input reset,
@@ -53,11 +55,11 @@ reg [3:0] char_line;
 reg [4:0] hor_pos;
 reg [7:0] vert_pos;
 reg [3:0] tvert_pos;
-reg [7:0] charmap[0:1023];
+//reg [7:0] charmap[0:1023];
 
-initial begin
-    $readmemb("charmap.list", charmap); // memory_list is memory file
-end
+//initial begin
+//    $readmemb("charmap.list", charmap); // memory_list is memory file
+//end
 
 
 wire hor_valid    = ~hor_counter[9];
@@ -76,8 +78,13 @@ wire c_restart    = char_line==4'b1011;
 wire next_byte    = hor_counter[3:0] == 4'b0000;
 wire next_line    = vert_counter[1:0] == 2'b11;
 reg h_sync,v_sync,pixel,bg,invs;
-wire [7:0] textchar   = charmap[{data[5:0],char_line }];
 
+
+wire [7:0] textchar  ;// = charmap[{data[5:0],char_line }];
+
+charGen charmap (
+	.address({data[5:0],char_line}),
+	.dout(textchar));
 
 always@(posedge clk) begin
 	if (reset) begin
