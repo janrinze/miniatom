@@ -3,8 +3,6 @@
 `define FAST_VERSION 1
 `include "hx8k_defs.v"
 
-//`include "uart.v"
-
 `include "vga.v"
 
 `include "../verilog-6502/ALU.v"
@@ -156,7 +154,7 @@ module top (
 			vga_green2_out,
 			vga_hsync_out,
 			vga_vsync_out;
-	
+/* 65 MHz	*/
     SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
                   .PLLOUT_SELECT("GENCLK"),
                   .DIVR(4'b0100),
@@ -172,9 +170,29 @@ module top (
                          .BYPASS(1'b0)
                         );
 
+/* 75 MHz
+    SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
+                  .PLLOUT_SELECT("GENCLK"),
+                  .DIVR(4'b0000),
+                  .DIVF(7'b0000101),
+                  .DIVQ(3'b011),
+                  .FILTER_RANGE(3'b101),
+                 ) uut (
+                         .REFERENCECLK(pclk),
+                         .PLLOUTCORE(fclk),
+                         //.PLLOUTGLOBAL(clk),
+                         .LOCK(resetq),
+                         .RESETB(reset),
+                         .BYPASS(1'b0)
+                        );
+*/
+
 	reg [31:0] counter = 0,counter_preset = 0;
 	reg [7:0] leds;
-	
+
+
+
+
 	
 	// fclk is 65 MHz
 	// clk is 32.5 MHz
@@ -279,7 +297,8 @@ module top (
 
     reg [3:0] keyboard_row,graphics_mode,Port_C_low,Port_C_high;
     reg [7:0] keyboard_input;
-   	wire [7:0] PIO_out;
+    wire [7:0] PIO_out;
+
     `pull_up(rept_key,  rept_key_t,		rept_keyp)
     `pull_up(shift_key, shift_keyt,		shift_keyp)
     `pull_up(ctrl_key,  ctrl_keyt,		ctrl_keyp)
@@ -296,6 +315,7 @@ module top (
 	       graphics_mode <= 4'h0;
 	       keyboard_row <=  4'hf;
 	       Port_C_low <= 4'h0;
+
 	    end else begin
 	        // grab keyboard_input
 	        keyboard_input <= { shift_keyp, ctrl_keyp, key_colp };
@@ -311,9 +331,8 @@ module top (
 	                end
 	        end
 	        IO_out <= PIO_out;
-	    end
-	   
-	end
+        end
+    end
 
 	// demux key row select
 	reg[9:0] key_demux;

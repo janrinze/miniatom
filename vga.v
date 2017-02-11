@@ -64,16 +64,26 @@ reg [3:0] tvert_pos;
 
 wire hor_valid    = ~hor_counter[9];
 wire vert_valid   = (vert_counter[9:8]==3) ? 0 : 1;
-wire hor_restart  = hor_counter == 671;
-wire hs_start     = hor_counter == 524;
-wire hs_stop	  = hor_counter == 592;
+/* 60 Hz */
+wire hor_restart  = hor_counter == 511+12+68+80;
+wire hs_start     = hor_counter == 511+12;
+wire hs_stop	  = hor_counter == 511+12+68;
 
-wire vert_restart = vert_counter == 805;
-wire vs_start     = vert_counter == 771;
-wire vs_stop	  = vert_counter == 777;
+wire vert_restart = vert_counter == 767+3+6+29;
+wire vs_start     = vert_counter == 767+3;
+wire vs_stop	  = vert_counter == 767+3+6;
 
+/* 75 Hz
+wire hor_restart  = hor_counter == 511+12+68+72;
+wire hs_start     = hor_counter == 511+12;
+wire hs_stop      = hor_counter == 511+12+68;
+
+wire vert_restart = vert_counter == 767+3+6+29;
+wire vs_start     = vert_counter == 767+3;
+wire vs_stop      = vert_counter == 767+3+6;
+*/
 wire textmode	  = settings[3]==1'b0;
-wire invert		  = textmode & data[7];
+wire invert	  = textmode & data[7];
 wire c_restart    = char_line==4'b1011;
 wire next_byte    = hor_counter[3:0] == 4'b0000;
 wire next_line    = vert_counter[1:0] == 2'b11;
@@ -84,7 +94,8 @@ wire [7:0] textchar  ;// = charmap[{data[5:0],char_line }];
 
 charGen charmap (
 	.address({data[5:0],char_line}),
-	.dout(textchar));
+	.dout(textchar)
+);
 
 always@(posedge clk) begin
 	if (reset) begin
@@ -104,7 +115,7 @@ always@(posedge clk) begin
 		    if (vert_restart) 
 		        vert_counter <= 0;
 		    else
-				vert_counter <= vert_counter + 1;
+			vert_counter <= vert_counter + 1;
 		end else begin
 		    hor_counter <= hor_counter + 1;
 		end	
@@ -133,7 +144,7 @@ always@(posedge clk) begin
 	    if (hor_counter[3:0]==4'b1111)
 	    begin
 	        invs <= invert;
-			if  (textmode)
+		if  (textmode)
 	          curpixeldat <= textchar;
 	        else
 	          curpixeldat <= data;
