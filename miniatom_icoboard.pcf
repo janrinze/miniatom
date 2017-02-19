@@ -79,11 +79,11 @@ set_io SRAM_D[13] L3
 set_io SRAM_D[14] K4
 set_io SRAM_D[15] K3
 
-set_io SRAM_CE  M7
-set_io SRAM_WE  T7
-set_io SRAM_OE  L5
-set_io SRAM_LB  J4
-set_io SRAM_UB  J3
+set_io SRAM_nCE  M7
+set_io SRAM_nWE  T7
+set_io SRAM_nOE  L5
+set_io SRAM_nLB  J4
+set_io SRAM_nUB  J3
 
 
 #set_io SPI_FLASH_CS   R12

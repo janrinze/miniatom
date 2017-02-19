@@ -128,11 +128,11 @@ module top (
 	// interface to 1MB SRAM icoboard
 	output [18:0] SRAM_A,
 	inout [15:0] SRAM_D,
-	output SRAM_CE,
-	output SRAM_WE,
-	output SRAM_OE,
-	output SRAM_LB,
-	output SRAM_UB
+	output SRAM_nCE,
+	output SRAM_nWE,
+	output SRAM_nOE,
+	output SRAM_nLB,
+	output SRAM_nUB
 );
 
     // ------------------------------------------------------------------------------------
@@ -444,11 +444,11 @@ module top (
     wire phi2_we;
 	
     assign phi2_we = W_en & ~clk;
-    assign SRAM_CE = 0;
-    assign SRAM_WE = (W_en) ? fclk & clk : 1;
-    assign SRAM_OE = (phi2_we);
-    assign SRAM_LB = (phi2_we) ? !sram_wrlb : 0;
-    assign SRAM_UB = (phi2_we) ? !sram_wrub : 0;
+    assign SRAM_nCE = 0;
+    assign SRAM_nWE = (W_en) ? fclk & clk : 1;
+    assign SRAM_nOE = (phi2_we);
+    assign SRAM_nLB = (phi2_we) ? !sram_wrlb : 0;
+    assign SRAM_nUB = (phi2_we) ? !sram_wrub : 0;
     assign sram_wrlb = W_en;
     assign sram_wrub = 0;
     assign sram_dout = { 8'd0,D_out};
