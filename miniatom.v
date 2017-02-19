@@ -1,20 +1,33 @@
-//################### Defs borrowed from swapforth ##################################
-`define MOS_BRAM 1
-`define FAST_VERSION 1
+/*
+ * verilog model of an Acorn ATOM.
+ *
+ * (C) Jan Rinze Peterzon, (janrinze@gmail.com)
+ *
+ * Feel free to use this code in any non-commercial project, as long as you
+ * keep this message, and the copyright notice. This code is provided "as is", 
+ * without any warranties of any kind.
+ *
+ * 
+ * For commercial purposes please contact the author regarding licensing.
+ * 
+ */
+
+
 `include "hx8k_defs.v"
+`include "vga/vga.v"
 
-`include "vga.v"
-
+/*
+   Include the sources from Arlet's 6502 verilog implementation.
+   
+*/
 `include "../verilog-6502/ALU.v"
-
 `include "../verilog-6502/cpu.v"
 
-/*  Stappen plan:
+/*  TODO:
 
-    1: test read/write RAM
-    2: implement 6502
-    3: test uart echo code
-    4: more..
+    - implement new 6502
+
+          Memory map of my old ATOM
 
           FFFF   Top of memory
 
@@ -24,7 +37,7 @@
           E000   Reserved -Disk Operating System
 
 
-          D000   ROM     MM52132    IC21
+          D000   ROM     MM52132    IC21		- onboard FPROM
 
 
           C000   ROM     MM52164    IC20        - onboard BASIC
@@ -35,7 +48,7 @@
           B000   PPI     INS8255    IC25	    - keyboard
 
 
-          A000   ROM     MN52132    IC24
+          A000   ROM     MN52132    IC24		- onboard P-Charme
 
           9800   Empty
           9400   RAM     2114       ICs 32&33   - onboard
@@ -86,22 +99,9 @@
 
 
 
-    Calculate 32.5 MHz 
-    icepll -o 32.5
-
-    F_PLLIN:    12.000 MHz (given)
-    F_PLLOUT:   35.500 MHz (requested)
-    F_PLLOUT:   35.250 MHz (achieved)
-
-    FEEDBACK: SIMPLE
-    F_PFD:   12.000 MHz
-    F_VCO:  564.000 MHz
-
-    DIVR:  0 (4'b0000)
-    DIVF: 86 (7'b1010110)
-    DIVQ:  3 (3'b100)
-
-    FILTER_RANGE: 1 (3'b001)
+    Calculate 32.5 MHz:
+     
+    icepll -i 100 -o 32.5
 
     */
     
@@ -111,19 +111,13 @@
 module top (
 	// global clock
 	input  pclk,
-	// diagnostic LEDs
-	output [7:0] LED,
 	
-	// vga output
+	// vga RGB 2:2:2 output
 	output hsync,
 	output vsync,
-	output blue,
-	output red,
-	output green1,
-	output green2,
+	output [5:0] rgb,
 	
-	
-	// keyboard
+	// interface to ATOM keyboard
 	input shift_key,
 	input ctrl_key,
 	input [5:0] key_col,
@@ -131,7 +125,7 @@ module top (
 	input key_reset,
 	output [9:0] key_row,
 	
-	// SRAM i/f
+	// interface to 1MB SRAM icoboard
 	output [18:0] SRAM_A,
 	inout [15:0] SRAM_D,
 	output SRAM_CE,
@@ -141,19 +135,15 @@ module top (
 	output SRAM_UB
 );
 
-    wire fclk;
-    reg clk;
-    wire resetq;
-	reg reset=1;
-	wire [12:0] vdu_address;
-	wire [12:0] vid_address;
-	reg  [12:0] latched_vid_addr;
-	wire 	vga_red_out,
-			vga_blue_out,
-			vga_green1_out,
-			vga_green2_out,
-			vga_hsync_out,
-			vga_vsync_out;
+    // ------------------------------------------------------------------------------------
+    // Clock generation
+    // ------------------------------------------------------------------------------------
+
+    wire fclk;			// 100 MHz clock icoboard
+    reg clk;			// 32.5 MHz derived system clock
+    wire pll_locked;	// signal when pll has reached lock
+	reg reset=1;		// global reset register
+	
 /* 65 MHz	*/
     SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
                   .PLLOUT_SELECT("GENCLK"),
@@ -165,30 +155,11 @@ module top (
                          .REFERENCECLK(pclk),
                          .PLLOUTCORE(fclk),
                          //.PLLOUTGLOBAL(clk),
-                         .LOCK(resetq),
+                         .LOCK(pll_locked),
                          .RESETB(reset),
                          .BYPASS(1'b0)
                         );
 
-/* 75 MHz
-    SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
-                  .PLLOUT_SELECT("GENCLK"),
-                  .DIVR(4'b0000),
-                  .DIVF(7'b0000101),
-                  .DIVQ(3'b011),
-                  .FILTER_RANGE(3'b101),
-                 ) uut (
-                         .REFERENCECLK(pclk),
-                         .PLLOUTCORE(fclk),
-                         //.PLLOUTGLOBAL(clk),
-                         .LOCK(resetq),
-                         .RESETB(reset),
-                         .BYPASS(1'b0)
-                        );
-*/
-
-	reg [31:0] counter = 0,counter_preset = 0;
-	reg [7:0] leds;
 
 
 
@@ -208,9 +179,8 @@ module top (
     wire [7:0] D_out;
     reg IRQ,NMI,RDY;
     wire W_en;
-    wire latch_counter;
     reg kbd_reset;
-    wire cpu_reset = ~kbd_reset | ~resetq;
+    wire cpu_reset = ~kbd_reset | ~pll_locked;
 
 	cpu main_cpu(
 	     .clk(clk),
@@ -226,16 +196,14 @@ module top (
 
 
     // ------------------------------------------------------------------------------------
-    // reset and tick counter
+    // reset 
 	// ------------------------------------------------------------------------------------
 	always@(posedge clk) begin
 	    if (cpu_reset) begin
 	       RDY<= 1;
 	       NMI<=0;
 	       IRQ<=0;
-	    end else begin
-	       counter <= counter + 1; // 32 bit tick timer 
-	     end
+	    end 
 	end
 	// ------------------------------------------------------------------------------------
 	    
@@ -311,7 +279,7 @@ module top (
 	end
     
 	always@(posedge clk) begin
-	    if (~resetq) begin
+	    if (~pll_locked) begin
 	       graphics_mode <= 4'h0;
 	       keyboard_row <=  4'hf;
 	       Port_C_low <= 4'h0;
@@ -369,6 +337,34 @@ module top (
 	// 
 	// ------------------------------------------------------------------------------------
 
+	// ATOM can do up to 4 colors
+	reg [5:0] color0;
+	reg [5:0] color1;
+	reg [5:0] color2;
+	reg [5:0] color3;
+
+    always@(posedge clk) begin
+	    if (~pll_locked) begin
+	       color0 <= 6'b000011;
+	       color1 <= 6'b111111;
+	       color2 <= 6'b111111;
+	       color3 <= 6'b111111;
+
+	    end else begin
+
+	        // latch writes to color regs
+	        if (IO_wr & VGAIO_select) begin
+	            case (cpu_address[1:0])
+					2'b00: color0 <= D_out[5:0];
+					2'b01: color1 <= D_out[5:0];
+					2'b10: color2 <= D_out[5:0];
+					2'b11: color3 <= D_out[5:0];
+	            endcase
+	        end
+        end
+    end
+
+
     // ------------------------------------------------------------------------------------
     // MOS ROM, BASIC ROM and minimal RAM
 	// ------------------------------------------------------------------------------------
@@ -376,33 +372,41 @@ module top (
     reg [7:0] latched_D_out;
     reg latched_W_en;
     reg [7:0] vid_data;
-    `include "BASIC_ROM.v"
-    `include "MOS_ROM.v"
-    `include "PCHARME_ROM.v"
-    `include "FP_ROM.v"
-    // ------------------------------------------------------------------------------------		
+    `include "build/BASIC_ROM.v"
+    `include "build/MOS_ROM.v"
+    `include "build/PCHARME_ROM.v"
+    `include "build/FP_ROM.v"
+    // ------------------------------------------------------------------------------------	
+    
+    
+    // ------------------------------------------------------------------------------------
+    // VGA signal generation
+	// ------------------------------------------------------------------------------------
+    wire [12:0] vdu_address;
+	//wire [12:0] vid_address;
+	wire [5:0] vga_rgb;
+	wire vga_hsync_out,vga_vsync_out;
+	
 	vga display(
 		.clk( clk ),
-		.reset(~resetq),
+		.reset(~pll_locked),
 		.address(vdu_address),
 		.data(vid_data),
 		.settings(graphics_mode),
-		.red(vga_red_out),
-		.blue(vga_blue_out),
-		.green1(vga_green1_out),
-		.green2(vga_green2_out),
+		.rgb(vga_rgb),
 		.hsync(vga_hsync_out),
-		.vsync(vga_vsync_out)
+		.vsync(vga_vsync_out),
+		.color0(color0),
+		.color1(color1),
+		.color2(color2),
+		.color3(color3)
 		);
 		
     
 	always@(posedge clk) begin
-		red      <= vga_red_out;
-		blue     <= vga_blue_out;
-		green1   <= vga_green1_out;
-		green2   <= vga_green2_out;
-		vsync    <= vga_vsync_out;
-		hsync    <= vga_hsync_out;
+		rgb   <= vga_rgb;
+		vsync <= vga_vsync_out;
+		hsync <= vga_hsync_out;
 		end
 
 
@@ -413,14 +417,9 @@ module top (
 	// ------------------------------------------------------------------------------------
 
 	// ------------------------------------------------------------------------------------
-	// interlace video and cpu on memory bus (should be okay at 130 MHz..)
+	// interlace video and cpu on memory bus (should be okay up to 50 MHz with 100MHz SRAM)
 	// vdu_address and cpu_addres are both latched on clk so this should be fine.
-	// we can always go to 65MHz cpu and vdu using an interlaced clock.
 	// ------------------------------------------------------------------------------------
-	
-	
-
-    assign vid_address = (cpu_address[15:13]==3'b100) ? cpu_address[12:0] : vdu_address[12:0];
 
     reg [1:0] sram_state;
     wire sram_wrlb, sram_wrub;
@@ -471,7 +470,7 @@ module top (
     end
 	
 
-    // --------- phase delayed -----------    
+    // --------- phi2  video data -----------    
     always@(negedge clk) begin
 		t_vid_data <= sram_din[7:0];
 		end
@@ -487,12 +486,9 @@ module top (
 		if (RDY)
 		begin
 		   latched_cpu_addr <= cpu_address;
-		   latched_vid_addr <= vid_address;
 		   latched_D_out <= D_out;
 		   latched_W_en <= W_en;
 		end
-		leds     <= keyboard_input;
 	end
-	assign LED = leds;
 	
 endmodule

@@ -1,33 +1,23 @@
-set_io LED[0] C8
-set_io LED[1] F7
-set_io LED[2] K9
-set_io LED[3] D8
-set_io LED[4] A11
-set_io LED[5] A10
-set_io LED[6] A9
-set_io LED[7] B8
+#
+# I/O pins for ICOboard
+#
+
 set_io pclk R9
 
 #set_io reset N11
 #set_io TXD B12
 #set_io RXD B10
 
-#set_io hsync C3
-#set_io vsync B3
-#set_io blue A2
-#set_io red B6
-#set_io green1 A5
-#set_io green2 B7
-
 set_io hsync B4
 set_io vsync B5
-set_io blue2 C3
-set_io blue1 B3
-set_io red2  A2
-set_io red1  B6
-set_io green2 A5
-set_io green1 B7
 
+# RGB 2:2:2
+set_io rgb[0] B3
+set_io rgb[1] C3
+set_io rgb[2] B7
+set_io rgb[3] A5
+set_io rgb[4] B6
+set_io rgb[5] A2
 
 set_io key_col[0] 	F11
 set_io key_col[1]	E14

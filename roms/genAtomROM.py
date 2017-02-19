@@ -69,7 +69,7 @@ def write_ram_512byte( myfile,outfile, address , rom_name):
 
 def write_ROM(romname,file_name,base_address,rom_size):
     myfile=open(file_name,'rb')
-    outfile=open(romname+".v",'w')
+    outfile=open("build/"+romname+".v",'w')
     outfile.write("/*\n")
     outfile.write("      Auto generated ROM file for Acorn Atom \n")
     outfile.write("     %-9s %-16s     Address Size\n" %("ROM","FileName"))
@@ -127,4 +127,4 @@ def write_lists(romlist):
 		dump_to_list(romname,file_name,base_address,rom_size)
 
 #write_lists([('MOS_ROM',"Atom_Kernel.rom",0xf000,4096),('BASIC_ROM',"Atom_Basic.rom",0xc000,4096)])
-write_ROMs([('MOS_ROM',"Atom_Kernel.rom",0xf000,4096),('BASIC_ROM',"Atom_Basic.rom",0xc000,4096),('PCHARME_ROM','pcharme.rom',0xa000,4096),('FP_ROM','floatingpoint.rom',0xd000,4096)])
+write_ROMs([('MOS_ROM',"roms/Atom_Kernel.rom",0xf000,4096),('BASIC_ROM',"roms/Atom_Basic.rom",0xc000,4096),('PCHARME_ROM','roms/pcharme.rom',0xa000,4096),('FP_ROM','roms/floatingpoint.rom',0xd000,4096)])
