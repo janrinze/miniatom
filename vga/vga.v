@@ -1,4 +1,16 @@
 /*
+ * verilog model of vga output generator for miniatom.
+ *
+ * (C) Jan Rinze Peterzon, (janrinze@gmail.com)
+ *
+ * Feel free to use this code in any non-commercial project, as long as you
+ * keep this message, and the copyright notice. This code is provided "as is", 
+ * without any warranties of any kind.
+ *
+ * 
+ */
+
+/*
 
     Simple VGA output (XGA 1024x768 1 bpp)
 
@@ -31,7 +43,7 @@
 
 */
 
-`include "charGen.v"
+`include "vga/charGen.v"
 
 module 	vga (
 		input clk,
@@ -39,28 +51,22 @@ module 	vga (
 		input [7:0] data,
 		input [3:0] settings,
 		output [12:0] address,
-		output red,
-		output blue,
-		output green1,
-		output green2,
+		output [5:0] rgb,
 		output hsync,
-		output vsync
+		output vsync,
+		input [5:0] color0,
+		input [5:0] color1,
+		input [5:0] color2,
+		input [5:0] color3		
 );
 
 reg [9:0] hor_counter;
 reg [9:0] vert_counter;
-reg [3:0] rgb;
 reg [7:0] curpixeldat;
 reg [3:0] char_line;
 reg [4:0] hor_pos;
 reg [7:0] vert_pos;
 reg [3:0] tvert_pos;
-//reg [7:0] charmap[0:1023];
-
-//initial begin
-//    $readmemb("charmap.list", charmap); // memory_list is memory file
-//end
-
 
 wire hor_valid    = ~hor_counter[9];
 wire vert_valid   = (vert_counter[9:8]==3) ? 0 : 1;
@@ -83,10 +89,11 @@ wire vs_start     = vert_counter == 767+3;
 wire vs_stop      = vert_counter == 767+3+6;
 */
 wire textmode	  = settings[3]==1'b0;
-wire invert	  = textmode & data[7];
+wire invert	      = textmode & data[7];
 wire c_restart    = char_line==4'b1011;
 wire next_byte    = hor_counter[3:0] == 4'b0000;
 wire next_line    = vert_counter[1:0] == 2'b11;
+
 reg h_sync,v_sync,pixel,bg,invs;
 
 
@@ -153,7 +160,9 @@ always@(posedge clk) begin
 			curpixeldat <= {curpixeldat[6:0],1'b0}; //shift_left	
 
 		pixel <= (invs ^ curpixeldat[7])  & hor_valid & vert_valid;
-		bg <= hor_valid & vert_valid;   
+		bg <= hor_valid & vert_valid; 
+		
+		// generate sync pulses  
 		if (hs_start)
 		   h_sync <=0;
 		else if (hs_stop)
@@ -168,12 +177,9 @@ end
 
 
 assign address = (textmode) ? {4'b000,tvert_pos,hor_pos}:{ vert_pos,hor_pos};
-assign hsync = h_sync & v_sync;
+assign hsync = h_sync;
 assign vsync = v_sync;
 
-assign blue = bg;
-assign red  = pixel;
-assign green1 = pixel;
-assign green2 = pixel;
+assign rgb  = pixel ? color1 : ( bg ? color0 : 6'b000000 );
 
 endmodule

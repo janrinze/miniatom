@@ -1,21 +1,17 @@
 PROJ = miniatom
 DEVICE = hx8k
-PIN_DEF = $(PROJ)_$(DEVICE).pcf
+BOARD = icoboard
+PIN_DEF = $(PROJ)_$(BOARD).pcf
 END_SPEED = 33
+SEED = 1587685918
 
 all: $(PROJ).rpt $(PROJ).bin
 
-ram_areas.v: genAtomRAM.py
-	./genAtomRAM.py > ram_areas.v
-
-rom_file.v: genAtomROM.py
-	./genAtomROM.py > rom_file.v
-
-%.blif: %.v ram_areas.v rom_file.v vga.v charmap.list
+%.blif: %.v vga/vga.v 
 	yosys -q -p 'synth_ice40 -top top -blif $@' $<
 
 %.asc: $(PIN_DEF) %.blif
-	arachne-pnr -r -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^
+	arachne-pnr -s $(SEED) -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^
 
 %.bin: %.asc
 	icepack $< $@
@@ -31,7 +27,7 @@ sudo-prog: $(PROJ).bin
 	sudo iceprog $<
 
 clean:
-	rm -f $(PROJ).blif $(PROJ).asc $(PROJ).rpt $(PROJ).bin ram_areas.v rom_file.v
+	rm -f $(PROJ).blif $(PROJ).asc $(PROJ).rpt $(PROJ).bin
 
 .SECONDARY:
 .PHONY: all prog clean
