@@ -338,7 +338,7 @@ module top (
 	// 
 	// ------------------------------------------------------------------------------------
 
-	// ATOM can do up to 4 colors
+	// ATOM can do up to 4 colors so we map them to writeable RGB 2:2:2 registers.
 	reg [5:0] color0;
 	reg [5:0] color1;
 	reg [5:0] color2;
@@ -368,17 +368,8 @@ module top (
     // ------------------------------------------------------------------------------------
     // MOS ROM, BASIC ROM and minimal RAM
 	// ------------------------------------------------------------------------------------
-    reg [15:0] latched_cpu_addr;
-    reg [7:0] latched_D_out;
-    reg latched_W_en;
     reg [7:0] vid_data;
-    /*
-    `include "build/BASIC_ROM.v"
-    `include "build/MOS_ROM.v"
-    `include "build/PCHARME_ROM.v"
-    `include "build/FP_ROM.v"
-    */
-    
+
     reg [7:0] kernel_rom[0:4095];
     reg [7:0] basic_rom[0:4095];
     reg [7:0] pcharme_rom[0:4095];
@@ -402,11 +393,12 @@ module top (
     assign fp_dat      = (romaddr[15:12]==4'hD) ? fp_rom[romaddr[11:0]]      : 8'h00;
     
     wire [7:0] boot_data;
-    
-    
+        
     assign boot_data = kernel_dat | basic_dat | pcharme_dat | fp_dat;   
     
-    // bootloader
+    // ------------------------------------------------------------------------------------
+    // Bootloader
+	// ------------------------------------------------------------------------------------
     reg [16:0] dma_addr;
     wire [16:0] next_dma_addr = dma_addr + 1;
     
@@ -427,14 +419,10 @@ module top (
 				dma_addr <= next_dma_addr;
 	end
     
-    // ------------------------------------------------------------------------------------	
-    
-    
     // ------------------------------------------------------------------------------------
     // VGA signal generation
 	// ------------------------------------------------------------------------------------
     wire [12:0] vdu_address;
-	//wire [12:0] vid_address;
 	wire [5:0] vga_rgb;
 	wire vga_hsync_out,vga_vsync_out;
 	
@@ -460,13 +448,6 @@ module top (
 		hsync <= vga_hsync_out;
 		end
 
-
-	// ------------------------------------------------------------------------------------
-	// collect IO outputs
-	// ------------------------------------------------------------------------------------
-    
-	// ------------------------------------------------------------------------------------
-
 	// ------------------------------------------------------------------------------------
 	// interlace video and cpu on memory bus (should be okay up to 50 MHz with 100MHz SRAM)
 	// vdu_address and cpu_addres are both latched on clk so this should be fine.
@@ -483,18 +464,18 @@ module top (
         .PULLUP(1'b 0)
     ) sram_io [15:0] (
         .PACKAGE_PIN(SRAM_D),
-	// --- 100 MHz memory with OE during PHI2 ---
         .OUTPUT_ENABLE(W_en & (~clk)),
         .D_OUT_0(sram_dout),
         .D_IN_0(sram_din)
     );
 
+	// redirect ROM write.
+	// Perhaps in future we want to enable dynamic roms
 	wire romwrite = W_en & cpu_address[15] & (cpu_address[14]|cpu_address[13]) ;
 
     assign SRAM_A = clk ? { 6'b000100, vdu_address[12:0] } :boot ? {2'b00,dma_addr } :{ romwrite,2'b00,cpu_address};
 
     wire phi2_we;
-	
     assign phi2_we = (W_en | boot ) & ~clk;
     assign SRAM_nCE = 0;
     assign SRAM_nWE = (phi2_we) ? fclk  : 1;
@@ -509,13 +490,13 @@ module top (
     reg [7:0] latch_SRAM_out;
     reg [7:0] t_vid_data;
 
-    // --------- data bus latches ---------
+    // --------- data bus latch ---------
     always@(posedge clk) begin
 		vid_data <=t_vid_data;
 		if (IO_select)
-			latch_SRAM_out <= PIO_out;
+			D_in <= PIO_out;
 		else
-			latch_SRAM_out <= sram_din[7:0];
+			D_in <= sram_din[7:0];
     end
 	
 
@@ -523,21 +504,5 @@ module top (
     always@(negedge clk) begin
 		t_vid_data <= sram_din[7:0];
 		end
-	
 
-    // --------- collect the databus from all connected devices ----------------------------
-
-    assign D_in =   latch_SRAM_out;//| BASIC_ROM_out | MOS_ROM_out | IO_out | PCHARME_ROM_out | FP_ROM_out );
-	
-    // -------------------------------------------------------------------------------------
-
-	always@(posedge clk) begin
-		if (RDY)
-		begin
-		   latched_cpu_addr <= cpu_address;
-		   latched_D_out <= D_out;
-		   latched_W_en <= W_en;
-		end
-	end
-	
 endmodule

@@ -7,10 +7,7 @@ SEED = 1587685918
 
 all: $(PROJ).rpt $(PROJ).bin
 
-rom_file.v: roms/genAtomROM.py
-	./roms/genAtomROM.py > rom_file.v
-
-%.blif: %.v rom_file.v vga/vga.v 
+%.blif: %.v vga/vga.v 
 	yosys -q -p 'synth_ice40 -top top -blif $@' $<
 
 %.asc: $(PIN_DEF) %.blif
@@ -30,7 +27,7 @@ sudo-prog: $(PROJ).bin
 	sudo iceprog $<
 
 clean:
-	rm -f $(PROJ).blif $(PROJ).asc $(PROJ).rpt $(PROJ).bin rom_file.v build/*
+	rm -f $(PROJ).blif $(PROJ).asc $(PROJ).rpt $(PROJ).bin
 
 .SECONDARY:
 .PHONY: all prog clean
