@@ -143,6 +143,7 @@ module top (
     reg clk;			// 32.5 MHz derived system clock
     wire pll_locked;	// signal when pll has reached lock
 	reg reset=1;		// global reset register
+	reg boot;
 	
 /* 65 MHz	*/
     SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
@@ -180,7 +181,7 @@ module top (
     reg IRQ,NMI,RDY;
     wire W_en;
     reg kbd_reset;
-    wire cpu_reset = ~kbd_reset | ~pll_locked;
+    wire cpu_reset = ~kbd_reset | ~pll_locked | boot;
 
 	cpu main_cpu(
 	     .clk(clk),
@@ -349,7 +350,6 @@ module top (
 	       color1 <= 6'b111111;
 	       color2 <= 6'b111111;
 	       color3 <= 6'b111111;
-
 	    end else begin
 
 	        // latch writes to color regs
@@ -372,10 +372,61 @@ module top (
     reg [7:0] latched_D_out;
     reg latched_W_en;
     reg [7:0] vid_data;
+    /*
     `include "build/BASIC_ROM.v"
     `include "build/MOS_ROM.v"
     `include "build/PCHARME_ROM.v"
     `include "build/FP_ROM.v"
+    */
+    
+    reg [7:0] kernel_rom[0:4095];
+    reg [7:0] basic_rom[0:4095];
+    reg [7:0] pcharme_rom[0:4095];
+    reg [7:0] fp_rom[0:4095];
+
+    initial $readmemh("roms/kernel.hex"		,kernel_rom);
+    initial $readmemh("roms/basic.hex"		,basic_rom);
+    initial $readmemh("roms/pcharme.hex"	,pcharme_rom);
+    initial $readmemh("roms/floatingpoint.hex",fp_rom);
+    
+    wire [16:0] romaddr;
+    wire [7:0] kernel_dat;
+    wire [7:0] basic_dat;
+    wire [7:0] pcharme_dat;
+    wire [7:0] fp_dat;
+    
+    
+    assign kernel_dat  = (romaddr[15:12]==4'hF) ? kernel_rom[romaddr[11:0]]  : 8'h00;
+    assign basic_dat   = (romaddr[15:12]==4'hC) ? basic_rom[romaddr[11:0]]   : 8'h00;
+    assign pcharme_dat = (romaddr[15:12]==4'hA) ? pcharme_rom[romaddr[11:0]] : 8'h00;
+    assign fp_dat      = (romaddr[15:12]==4'hD) ? fp_rom[romaddr[11:0]]      : 8'h00;
+    
+    wire [7:0] boot_data;
+    
+    
+    assign boot_data = kernel_dat | basic_dat | pcharme_dat | fp_dat;   
+    
+    // bootloader
+    reg [16:0] dma_addr;
+    wire [16:0] next_dma_addr = dma_addr + 1;
+    
+    assign romaddr = dma_addr;
+    
+    
+    always@(posedge clk)
+    begin
+		if (~pll_locked)
+		begin
+			dma_addr <= 17'h9000;
+			boot <= 1;
+		end
+		else
+			if (dma_addr[16])
+				boot <= 0;
+			else
+				dma_addr <= next_dma_addr;
+	end
+    
     // ------------------------------------------------------------------------------------	
     
     
@@ -438,20 +489,21 @@ module top (
         .D_IN_0(sram_din)
     );
 
+	wire romwrite = W_en & cpu_address[15] & (cpu_address[14]|cpu_address[13]) ;
 
-    assign SRAM_A = (clk == 1) ? { 6'b000100, vdu_address[12:0] } :{ 3'b000,cpu_address};
+    assign SRAM_A = clk ? { 6'b000100, vdu_address[12:0] } :boot ? {2'b00,dma_addr } :{ romwrite,2'b00,cpu_address};
 
     wire phi2_we;
 	
-    assign phi2_we = W_en & ~clk;
+    assign phi2_we = (W_en | boot ) & ~clk;
     assign SRAM_nCE = 0;
-    assign SRAM_nWE = (W_en) ? fclk & clk : 1;
+    assign SRAM_nWE = (phi2_we) ? fclk  : 1;
     assign SRAM_nOE = (phi2_we);
     assign SRAM_nLB = (phi2_we) ? !sram_wrlb : 0;
     assign SRAM_nUB = (phi2_we) ? !sram_wrub : 0;
     assign sram_wrlb = W_en;
     assign sram_wrub = 0;
-    assign sram_dout = { 8'd0,D_out};
+    assign sram_dout = { 8'd0, boot ? boot_data : D_out};
 
 	
     reg [7:0] latch_SRAM_out;
@@ -460,13 +512,10 @@ module top (
     // --------- data bus latches ---------
     always@(posedge clk) begin
 		vid_data <=t_vid_data;
-		if (cpu_address[15:12] < 4'hA)
-		begin
+		if (IO_select)
+			latch_SRAM_out <= PIO_out;
+		else
 			latch_SRAM_out <= sram_din[7:0];
-			end
-		else begin
-			latch_SRAM_out <= 8'd0;
-			end
     end
 	
 
@@ -478,7 +527,7 @@ module top (
 
     // --------- collect the databus from all connected devices ----------------------------
 
-    assign D_in =  ( latch_SRAM_out| BASIC_ROM_out | MOS_ROM_out | IO_out | PCHARME_ROM_out | FP_ROM_out );
+    assign D_in =   latch_SRAM_out;//| BASIC_ROM_out | MOS_ROM_out | IO_out | PCHARME_ROM_out | FP_ROM_out );
 	
     // -------------------------------------------------------------------------------------
 
