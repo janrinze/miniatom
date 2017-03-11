@@ -13,7 +13,7 @@
  */
 
 
-`include "hx8k_defs.v"
+//`include "hx8k_defs.v"
 `include "vga/vga.v"
 
 /*
@@ -176,12 +176,12 @@ module top (
     // Main 6502 CPU
     // ------------------------------------------------------------------------------------
     wire [15:0] cpu_address;
-    wire [7:0] D_in;
+    reg [7:0] D_in;
     wire [7:0] D_out;
     reg IRQ,NMI,RDY;
     wire W_en;
     reg kbd_reset;
-    wire cpu_reset = ~kbd_reset | ~pll_locked | boot;
+    wire cpu_reset = ~kbd_reset | ~pll_locked | boot ;
 
 	cpu main_cpu(
 	     .clk(clk),
@@ -280,7 +280,7 @@ module top (
 	end
     
 	always@(posedge clk) begin
-	    if (~pll_locked) begin
+	    if (cpu_reset) begin
 	       graphics_mode <= 4'h0;
 	       keyboard_row <=  4'hf;
 	       Port_C_low <= 4'h0;
@@ -345,7 +345,7 @@ module top (
 	reg [5:0] color3;
 
     always@(posedge clk) begin
-	    if (~pll_locked) begin
+	    if (cpu_reset) begin
 	       color0 <= 6'b000011;
 	       color1 <= 6'b111111;
 	       color2 <= 6'b111111;
@@ -380,7 +380,7 @@ module top (
     initial $readmemh("roms/pcharme.hex"	,pcharme_rom);
     initial $readmemh("roms/floatingpoint.hex",fp_rom);
     
-    wire [16:0] romaddr;
+    wire [18:0] romaddr;
     wire [7:0] kernel_dat;
     wire [7:0] basic_dat;
     wire [7:0] pcharme_dat;
@@ -399,21 +399,21 @@ module top (
     // ------------------------------------------------------------------------------------
     // Bootloader
 	// ------------------------------------------------------------------------------------
-    reg [16:0] dma_addr;
-    wire [16:0] next_dma_addr = dma_addr + 1;
+    reg [18:0] dma_addr;
+    wire [18:0] next_dma_addr = dma_addr + 1;
     
     assign romaddr = dma_addr;
     
-    
-    always@(posedge clk)
+
+    always@(negedge clk)
     begin
-		if (~pll_locked)
+		if (reboot)
 		begin
-			dma_addr <= 17'h9000;
+			dma_addr <= 19'h09000;
 			boot <= 1;
 		end
 		else
-			if (dma_addr[16])
+			if (dma_addr[16]==1)
 				boot <= 0;
 			else
 				dma_addr <= next_dma_addr;
@@ -423,15 +423,34 @@ module top (
     // VGA signal generation
 	// ------------------------------------------------------------------------------------
     wire [12:0] vdu_address;
-	wire [5:0] vga_rgb;
+    wire [2:0] vid_page = 0;
+    wire [5:0] vga_rgb;
 	wire vga_hsync_out,vga_vsync_out;
+	
+	reg [8:0] mx = 0;
+	reg [8:0] my = 0;
+	reg [5:0] mcolor = 6'b101011; // light blue
+	
+    reg reboot;
+
+    always @(*)
+    begin
+		reboot = 0;
+		if (pll_locked==0 || (key_reset_p==0 && rept_keyp==0))
+			reboot = 1;
+	end
 	
 	vga display(
 		.clk( clk ),
-		.reset(~pll_locked),
+		.reset(reboot),
 		.address(vdu_address),
+		//.page(vid_page),
 		.data(vid_data),
 		.settings(graphics_mode),
+		//.mx(mx),
+		//.my(my),
+		//.mcolor(mcolor),
+        //.dreq(dreq),
 		.rgb(vga_rgb),
 		.hsync(vga_hsync_out),
 		.vsync(vga_vsync_out),
@@ -453,46 +472,70 @@ module top (
 	// vdu_address and cpu_addres are both latched on clk so this should be fine.
 	// ------------------------------------------------------------------------------------
 
-    reg [1:0] sram_state;
-    wire sram_wrlb, sram_wrub;
-    wire [18:0] sram_addr;
-    wire [15:0] sram_dout;
+    reg [15:0] sram_dout;
     wire [15:0] sram_din;
-    assign phi2_we = (W_en | boot ) & ~clk;
-    wire phi2_we;
+    reg [18:0] bus_address;
+    reg nWE,nOE,OE;
+
     SB_IO #(
         .PIN_TYPE(6'b 1010_01),
         .PULLUP(1'b 0)
     ) sram_io [15:0] (
         .PACKAGE_PIN(SRAM_D),
-        .OUTPUT_ENABLE(phi2_we),
+        .OUTPUT_ENABLE(OE),
         .D_OUT_0(sram_dout),
         .D_IN_0(sram_din)
     );
 
-	// redirect ROM write.
-	// Perhaps in future we want to enable dynamic roms
-	wire romwrite = W_en & cpu_address[15] & (cpu_address[14]|cpu_address[13]) ;
+	// Bus arbitrator for video, BootDMA and CPU
+	reg [18:0] bus_selected;
 
-    assign SRAM_A = clk ? { 6'b000100, vdu_address[12:0] } :boot ? {2'b00,dma_addr } :{ romwrite,2'b00,cpu_address};
+	always@(*)
+	begin
+		if (clk)
+			begin
+				nOE = 0;
+				OE = 0;
+				nWE = 1;
+				bus_selected = { 6'b000100, vdu_address[12:0] };
+				sram_dout = 16'h0000;
+			end
+		else
+			begin
+				if (boot)
+					begin
+						nWE = 0;
+						nOE = 1;
+						OE  = 1;
+						bus_selected = dma_addr;
+						sram_dout = {8'h00,boot_data};
+					end 
+				else
+					begin
+						nWE = fclk | ~W_en;
+						nOE = W_en;
+						OE = W_en;
+						bus_selected = { 3'b000,cpu_address};
+						sram_dout = {8'h00,D_out};
+					end
+			end
+	end
 
-
+	// Hook up our bus signals to the SRAM
+	assign SRAM_A = bus_selected;
     assign SRAM_nCE = 0;
-    assign SRAM_nWE = (phi2_we) ? 0  : 1;
-    assign SRAM_nOE = (phi2_we);
-    assign SRAM_nLB = (phi2_we) ? !sram_wrlb : 0;
-    assign SRAM_nUB = (phi2_we) ? !sram_wrub : 0;
-    assign sram_wrlb = W_en;
-    assign sram_wrub = 0;
-    assign sram_dout = { 8'd0, boot ? boot_data : D_out};
-
+    assign SRAM_nWE = nWE;
+    assign SRAM_nOE = nOE;
+    assign SRAM_nLB = 0;
+    assign SRAM_nUB = 1;
 	
+	// Latches so we can keep the data available for the bus clients.
     reg [7:0] latch_SRAM_out;
     reg [7:0] t_vid_data;
 
     // --------- data bus latch ---------
     always@(posedge clk) begin
-		vid_data <=t_vid_data;
+		vid_data <= t_vid_data;
 		if (IO_select)
 			D_in <= PIO_out;
 		else
