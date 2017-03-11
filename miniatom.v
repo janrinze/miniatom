@@ -458,13 +458,14 @@ module top (
     wire [18:0] sram_addr;
     wire [15:0] sram_dout;
     wire [15:0] sram_din;
-
+    assign phi2_we = (W_en | boot ) & ~clk;
+    wire phi2_we;
     SB_IO #(
         .PIN_TYPE(6'b 1010_01),
         .PULLUP(1'b 0)
     ) sram_io [15:0] (
         .PACKAGE_PIN(SRAM_D),
-        .OUTPUT_ENABLE(W_en & (~clk)),
+        .OUTPUT_ENABLE(phi2_we),
         .D_OUT_0(sram_dout),
         .D_IN_0(sram_din)
     );
@@ -475,10 +476,9 @@ module top (
 
     assign SRAM_A = clk ? { 6'b000100, vdu_address[12:0] } :boot ? {2'b00,dma_addr } :{ romwrite,2'b00,cpu_address};
 
-    wire phi2_we;
-    assign phi2_we = (W_en | boot ) & ~clk;
+
     assign SRAM_nCE = 0;
-    assign SRAM_nWE = (phi2_we) ? fclk  : 1;
+    assign SRAM_nWE = (phi2_we) ? 0  : 1;
     assign SRAM_nOE = (phi2_we);
     assign SRAM_nLB = (phi2_we) ? !sram_wrlb : 0;
     assign SRAM_nUB = (phi2_we) ? !sram_wrub : 0;
