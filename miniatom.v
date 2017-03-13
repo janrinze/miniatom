@@ -145,7 +145,6 @@ module top (
     // Clock generation
     // ------------------------------------------------------------------------------------
 
-	wire hclk;			// 260 Mhz
     wire fclk;			// 65 MHz
     reg clk;			// 32.5 MHz derived system clock
     reg phi2;			// 
@@ -161,10 +160,7 @@ module top (
 
 	// fclk is 65 MHz
 	// clk is 32.5 MHz
-/*
-	reg [7:0] S0 = 8'b11100000; // 32.5 
-	reg [7:0] S1 = 8'b00000111; // Write window
-	wire */
+
 	always@(posedge fclk) begin
 		clk <= ~clk;
 		
@@ -180,8 +176,7 @@ module top (
     wire W_en;
     reg kbd_reset;
     wire cpu_reset = ~kbd_reset | ~pll_locked | boot ;
-//	wire rd,sync;
-//	assign W_en = ~rd;
+
 	cpu main_cpu(
 	     .clk(clk),
 	     .reset(cpu_reset),
@@ -193,29 +188,7 @@ module top (
 	     .NMI(NMI),
 	     .RDY(RDY) );
 	     
-/*
-	ag6502 main_cpu(
-		.phi_0(clk),
-		.ab(cpu_address),
-		.read(rd),
-		.db_in(D_in),
-		.db_out(D_out),
-		.rdy(RDY),
-		.rst(cpu_reset),
-		.irq(IRQ),
-		.nmi(NMI),
-		.so(0),
-		.sync(sync));
-	bc6502 (
-	     .clk(clk),
-	     .reset(cpu_reset),
-	     .ma(cpu_address),
-	     .di(D_in),
-	     .do(D_out),
-	     .rw(rd),
-	     .irq(IRQ),
-	     .nmi(NMI),
-	     .rdy(RDY) );*/
+
     // ------------------------------------------------------------------------------------
 
 
