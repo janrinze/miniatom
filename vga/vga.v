@@ -60,50 +60,51 @@ module 	vga (
 		input [5:0] color3		
 );
 
-reg [9:0] hor_counter;
-wire [9:0] next_hor_counter = hor_counter + 1;
-reg [9:0] vert_counter;
-wire [9:0] next_vert_counter = vert_counter +1;
+reg [9:0] vesa_hor_pos;
+reg [9:0] vesa_vert_pos;
 
 reg [3:0] char_line;
 reg [5:0] hor_pos;
 reg [7:0] vert_pos;
-reg [3:0] tvert_pos;
+reg [3:0] text_vert_pos;
 reg bottom;
+reg h_sync,v_sync,pixel,bg,invs;
 
-
-wire hor_valid    = ~hor_counter[9];
-wire vert_valid   = (vert_counter[9:8]==3) ? 0 : 1;
+// rgb signal valid
+wire hor_valid    = ~vesa_hor_pos[9];
+wire vert_valid   = (vesa_vert_pos[9:8]==3) ? 0 : 1;
 
 /* 60 Hz */
-wire hor_restart  = hor_counter == 511+12+68+80;
-wire hs_start     = hor_counter == 511+12;
-wire hs_stop	  = hor_counter == 511+12+68;
+wire hor_restart  = (vesa_hor_pos == 511+12+68+80);
+wire hs_start     = (vesa_hor_pos == 511+12);
+wire hs_stop	  = (vesa_hor_pos == 511+12+68);
 
-wire vert_restart = (vert_counter == 767+3+6+29) && hor_restart;
-wire vs_start     = vert_counter == 767+3;
-wire vs_stop	  = vert_counter == 767+3+6;
+wire vert_restart = (vesa_vert_pos == 767+3+6+29);
+wire vs_start     = (vesa_vert_pos == 767+3);
+wire vs_stop	  = (vesa_vert_pos == 767+3+6);
 
-/* 75 Hz
-wire hor_restart  = hor_counter == 511+12+68+72;
-wire hs_start     = hor_counter == 511+12;
-wire hs_stop      = hor_counter == 511+12+68;
+wire textmode	  = (settings[3] == 1'b0);
+wire invert	      = (textmode & data[7]);
+wire c_restart    = (char_line == 4'b1100);
+wire next_byte    = (next_vesa_hor_pos[2:0] == 3'b111);
+wire next_line    = (vesa_vert_pos[0]);
+wire second_half  = (vert_pos == 191) && hor_restart;
+wire next_bottom  = second_half ? 1 : ( bottom & vert_valid );
 
-wire vert_restart = vert_counter == 767+3+6+29;
-wire vs_start     = vert_counter == 767+3;
-wire vs_stop      = vert_counter == 767+3+6;
-*/
-wire textmode	  = settings[3]==1'b0;
-wire invert	      = textmode & data[7];
-wire c_restart    = char_line==4'b1011;
-wire next_byte    = hor_counter[2:0] == 3'b111;
-wire next_line    = vert_counter[0] == 1'b1;
-wire second_half  = vert_pos == 191;
-reg h_sync,v_sync,pixel,bg,invs;
+wire [9:0] next_vesa_hor_pos	= hor_restart ? 0 : ( vesa_hor_pos + 1 );
+wire [5:0] next_hor_pos 		= hor_valid ? ( next_byte ? hor_pos + 1 : hor_pos ) : 0;
+
+wire [9:0] next_vesa_vert_pos	= vert_restart ? 0 :  ( vesa_vert_pos + 1 );
+wire [7:0] next_vert_pos 		= ( ~vert_valid || second_half ) ? 0 : (next_line? vert_pos + 1: vert_pos ) ;
+wire [3:0] next_text_vert_pos	= ( vert_restart ) ? 0 : ( c_restart ? text_vert_pos + 1: text_vert_pos ); 
+wire [3:0] next_char_line		= ( c_restart || vert_restart )   ? 0 : ( next_line ? char_line + 1: char_line );
+
+wire next_hsync = hs_start ? 0 : ( hs_stop ? 1 : h_sync);
+wire next_vsync = vs_start ? 0 : ( vs_stop ? 1 : v_sync);
 
 reg [7:0] pixels_input;
 reg input_pixel;
-wire [7:0] textchar  ;// = charmap[{data[5:0],char_line }];
+wire [7:0] textchar;	// = charmap[{data[5:0],char_line }];
 
 charGen charmap (
 	.address({data[5:0],char_line}),
@@ -123,7 +124,7 @@ reg highres_pixel;
 always@(*)
 begin
 	begin
-		case(hor_counter[2:0])
+		case(vesa_hor_pos[2:0])
 		0: highres_pixel = pixels_input[7];
 		1: highres_pixel = pixels_input[6];
 		2: highres_pixel = pixels_input[5];
@@ -141,7 +142,7 @@ reg [1:0] medium_pixel;
 always@(*)
 begin
 	begin
-		case(hor_counter[2:1])
+		case(vesa_hor_pos[2:1])
 		0: medium_pixel = pixels_input[7:6];
 		1: medium_pixel = pixels_input[5:4];
 		2: medium_pixel = pixels_input[3:2];
@@ -171,69 +172,41 @@ begin
 	end
 end
 
-always@(posedge clk ) begin
+always@(negedge clk ) begin
 	if (reset) begin
-		hor_counter <= 0;
-		vert_counter <= 0;
+		vesa_hor_pos <= 0;
+		vesa_vert_pos <= 0;
 		h_sync <= 1;
 		v_sync <= 1;
 		char_line <=0;
 		hor_pos<=0;
 		vert_pos<=0;
-		tvert_pos<=0;
+		text_vert_pos<=0;
 		bottom <=0;
-	end else begin
+	 end 
+	else
+	 begin
+		
+		vesa_hor_pos <= next_vesa_hor_pos;
+		hor_pos <= next_hor_pos;
+		
 		if (hor_restart) begin
-		    hor_counter <= 0;
-			if (vert_restart) 
-				vert_counter <= 0;
-			else
-				vert_counter <= next_vert_counter;
-			end
-		else
-			hor_counter <= next_hor_counter;
-		
-
-		if (hs_start)
-			hor_pos <=0;
-		else if (next_byte & hor_valid)
-			hor_pos <= hor_pos+1;
-
-		
-		if (vs_start || second_half) begin
-			vert_pos <= 0;
-			char_line<=0;
-			tvert_pos <= 0;
-			if (second_half)
-				bottom <= 1;
-			else
-				bottom <= 0;
-				
-		end 
-		else if ( next_line & vert_valid & hs_start) begin
-			vert_pos <= vert_pos +1;	
-		    if (c_restart) begin
-				char_line <=0;
-				tvert_pos<=tvert_pos+1;
-			end	else
-				char_line <= char_line +1;
+			vesa_vert_pos <= next_vesa_vert_pos;
+			vert_pos <= next_vert_pos;
+			char_line <= next_char_line;
+			text_vert_pos <= next_text_vert_pos;
 		end
-
 		// generate sync pulses  
-		if (hs_start)
-		   h_sync <=0;
-		else if (hs_stop)
-		   h_sync <=1;
-		if (vs_start)
-		   v_sync <=0;
-		else if (vs_stop)
-		   v_sync <=1;
+		h_sync <= next_hsync;
+		v_sync <= next_vsync;
+		
+		bottom <= next_bottom;
 	end	
 end
 
-wire [5:0] topbits;
-assign topbits = {1'b0,bottom,hor_pos[5],3'b100 };
-assign address = (textmode) ? { topbits , 4'b000,tvert_pos,hor_pos[4:0]}:{ topbits, vert_pos,hor_pos[4:0]};
+//wire [5:0] topbits;
+assign address[18:13] = {1'b0,bottom,hor_pos[5],3'b100 };
+assign address[12:0] = (textmode) ? { 4'b000,text_vert_pos,hor_pos[4:0]}:{ vert_pos,hor_pos[4:0]};
 assign hsync = h_sync;
 assign vsync = v_sync;
 
