@@ -50,7 +50,7 @@ module 	vga (
 		input reset,
 		input [7:0] data,
 		input [3:0] settings,
-		output [12:0] address,
+		output [18:0] address,
 		output [5:0] rgb,
 		output hsync,
 		output vsync,
@@ -61,21 +61,26 @@ module 	vga (
 );
 
 reg [9:0] hor_counter;
+wire [9:0] next_hor_counter = hor_counter + 1;
 reg [9:0] vert_counter;
-reg [7:0] curpixeldat;
+wire [9:0] next_vert_counter = vert_counter +1;
+
 reg [3:0] char_line;
-reg [4:0] hor_pos;
+reg [5:0] hor_pos;
 reg [7:0] vert_pos;
 reg [3:0] tvert_pos;
+reg bottom;
+
 
 wire hor_valid    = ~hor_counter[9];
 wire vert_valid   = (vert_counter[9:8]==3) ? 0 : 1;
+
 /* 60 Hz */
 wire hor_restart  = hor_counter == 511+12+68+80;
 wire hs_start     = hor_counter == 511+12;
 wire hs_stop	  = hor_counter == 511+12+68;
 
-wire vert_restart = vert_counter == 767+3+6+29;
+wire vert_restart = (vert_counter == 767+3+6+29) && hor_restart;
 wire vs_start     = vert_counter == 767+3;
 wire vs_stop	  = vert_counter == 767+3+6;
 
@@ -91,12 +96,13 @@ wire vs_stop      = vert_counter == 767+3+6;
 wire textmode	  = settings[3]==1'b0;
 wire invert	      = textmode & data[7];
 wire c_restart    = char_line==4'b1011;
-wire next_byte    = hor_counter[3:0] == 4'b0000;
-wire next_line    = vert_counter[1:0] == 2'b11;
-
+wire next_byte    = hor_counter[2:0] == 3'b111;
+wire next_line    = vert_counter[0] == 1'b1;
+wire second_half  = vert_pos == 191;
 reg h_sync,v_sync,pixel,bg,invs;
 
-
+reg [7:0] pixels_input;
+reg input_pixel;
 wire [7:0] textchar  ;// = charmap[{data[5:0],char_line }];
 
 charGen charmap (
@@ -104,39 +110,105 @@ charGen charmap (
 	.dout(textchar)
 );
 
-always@(posedge clk) begin
+// Text or graphics
+always@(*) begin
+	if (textmode)
+		pixels_input = (invert)?~textchar:textchar;
+	else
+		pixels_input = data;
+	end
+
+// serialize pixels
+reg highres_pixel;
+always@(*)
+begin
+	begin
+		case(hor_counter[2:0])
+		0: highres_pixel = pixels_input[7];
+		1: highres_pixel = pixels_input[6];
+		2: highres_pixel = pixels_input[5];
+		3: highres_pixel = pixels_input[4];
+		4: highres_pixel = pixels_input[3];
+		5: highres_pixel = pixels_input[2];
+		6: highres_pixel = pixels_input[1];
+		7: highres_pixel = pixels_input[0];
+		endcase
+	end
+end
+
+// serialize pixels
+reg [1:0] medium_pixel;
+always@(*)
+begin
+	begin
+		case(hor_counter[2:1])
+		0: medium_pixel = pixels_input[7:6];
+		1: medium_pixel = pixels_input[5:4];
+		2: medium_pixel = pixels_input[3:2];
+		3: medium_pixel = pixels_input[1:0];
+		endcase
+	end
+end
+
+// map colors to output
+always@(*)
+begin
+	rgb = 6'd0;
+	if (hor_valid && vert_valid)
+	begin
+		if (settings[3:0]==4'b1001)
+			case (medium_pixel)
+			0: rgb = color0;
+			1: rgb = color1;
+			2: rgb = color2;
+			3: rgb = color3;
+			endcase
+		else
+			if (highres_pixel)
+				rgb = color1;
+			else
+				rgb = color0;
+	end
+end
+
+always@(posedge clk ) begin
 	if (reset) begin
 		hor_counter <= 0;
 		vert_counter <= 0;
 		h_sync <= 1;
 		v_sync <= 1;
-		pixel <= 0;
-		curpixeldat <=0;
 		char_line <=0;
 		hor_pos<=0;
 		vert_pos<=0;
 		tvert_pos<=0;
+		bottom <=0;
 	end else begin
 		if (hor_restart) begin
 		    hor_counter <= 0;
-		    if (vert_restart) 
-		        vert_counter <= 0;
-		    else
-			vert_counter <= vert_counter + 1;
-		end else begin
-		    hor_counter <= hor_counter + 1;
-		end	
+			if (vert_restart) 
+				vert_counter <= 0;
+			else
+				vert_counter <= next_vert_counter;
+			end
+		else
+			hor_counter <= next_hor_counter;
 		
-		
+
 		if (hs_start)
 			hor_pos <=0;
 		else if (next_byte & hor_valid)
 			hor_pos <= hor_pos+1;
+
 		
-		if (vs_start) begin
+		if (vs_start || second_half) begin
 			vert_pos <= 0;
 			char_line<=0;
 			tvert_pos <= 0;
+			if (second_half)
+				bottom <= 1;
+			else
+				bottom <= 0;
+				
 		end 
 		else if ( next_line & vert_valid & hs_start) begin
 			vert_pos <= vert_pos +1;	
@@ -147,21 +219,6 @@ always@(posedge clk) begin
 				char_line <= char_line +1;
 		end
 
-		
-	    if (hor_counter[3:0]==4'b1111)
-	    begin
-	        invs <= invert;
-		if  (textmode)
-	          curpixeldat <= textchar;
-	        else
-	          curpixeldat <= data;
-	    end
-	    else if (hor_counter[0]==1'b1) 
-			curpixeldat <= {curpixeldat[6:0],1'b0}; //shift_left	
-
-		pixel <= (invs ^ curpixeldat[7])  & hor_valid & vert_valid;
-		bg <= hor_valid & vert_valid; 
-		
 		// generate sync pulses  
 		if (hs_start)
 		   h_sync <=0;
@@ -171,15 +228,13 @@ always@(posedge clk) begin
 		   v_sync <=0;
 		else if (vs_stop)
 		   v_sync <=1;
-			
 	end	
 end
 
-
-assign address = (textmode) ? {4'b000,tvert_pos,hor_pos}:{ vert_pos,hor_pos};
+wire [5:0] topbits;
+assign topbits = {1'b0,bottom,hor_pos[5],3'b100 };
+assign address = (textmode) ? { topbits , 4'b000,tvert_pos,hor_pos[4:0]}:{ topbits, vert_pos,hor_pos[4:0]};
 assign hsync = h_sync;
 assign vsync = v_sync;
-
-assign rgb  = pixel ? color1 : ( bg ? color0 : 6'b000000 );
 
 endmodule

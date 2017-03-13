@@ -22,6 +22,8 @@
 */
 `include "../verilog-6502/ALU.v"
 `include "../verilog-6502/cpu.v"
+//`include "bc6502.v"
+`include "65Mhz.v"
 
 /*  TODO:
 
@@ -104,9 +106,13 @@
     icepll -i 100 -o 32.5
 
     */
-    
+`ifdef verilator
+`define pull_up( source , type, dest) 	wire dest; assign dest=source;
+`define pull_N_up( source , type,num, dest) 	wire [num:0] dest=source;
+`else
 `define pull_up( source , type, dest) 	wire dest;  SB_IO #(	.PIN_TYPE(6'b0000_01),.PULLUP(1'b1)	) type (.PACKAGE_PIN(source),.D_IN_0(dest));
 `define pull_N_up( source , type,num, dest) 	wire [num:0] dest;  SB_IO #(	.PIN_TYPE(6'b0000_01),.PULLUP(1'b1)	) type[num:0] (.PACKAGE_PIN(source),.D_IN_0(dest));
+`endif
 
 module top (
 	// global clock
@@ -139,37 +145,29 @@ module top (
     // Clock generation
     // ------------------------------------------------------------------------------------
 
-    wire fclk;			// 100 MHz clock icoboard
+	wire hclk;			// 260 Mhz
+    wire fclk;			// 65 MHz
     reg clk;			// 32.5 MHz derived system clock
+    reg phi2;			// 
     wire pll_locked;	// signal when pll has reached lock
 	reg reset=1;		// global reset register
 	reg boot;
-	
-/* 65 MHz	*/
-    SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
-                  .PLLOUT_SELECT("GENCLK"),
-                  .DIVR(4'b0100),
-                  .DIVF(7'b0110011),
-                  .DIVQ(3'b100),
-                  .FILTER_RANGE(3'b010),
-                 ) uut (
-                         .REFERENCECLK(pclk),
-                         .PLLOUTCORE(fclk),
-                         //.PLLOUTGLOBAL(clk),
-                         .LOCK(pll_locked),
-                         .RESETB(reset),
-                         .BYPASS(1'b0)
-                        );
 
 
+	pll _65Mhz(
+		.clock_in(pclk),
+		.clock_out(fclk),
+		.locked(pll_locked));
 
-
-
-	
 	// fclk is 65 MHz
 	// clk is 32.5 MHz
+/*
+	reg [7:0] S0 = 8'b11100000; // 32.5 
+	reg [7:0] S1 = 8'b00000111; // Write window
+	wire */
 	always@(posedge fclk) begin
 		clk <= ~clk;
+		
 	end
 
     // ------------------------------------------------------------------------------------
@@ -182,7 +180,8 @@ module top (
     wire W_en;
     reg kbd_reset;
     wire cpu_reset = ~kbd_reset | ~pll_locked | boot ;
-
+//	wire rd,sync;
+//	assign W_en = ~rd;
 	cpu main_cpu(
 	     .clk(clk),
 	     .reset(cpu_reset),
@@ -193,6 +192,30 @@ module top (
 	     .IRQ(IRQ),
 	     .NMI(NMI),
 	     .RDY(RDY) );
+	     
+/*
+	ag6502 main_cpu(
+		.phi_0(clk),
+		.ab(cpu_address),
+		.read(rd),
+		.db_in(D_in),
+		.db_out(D_out),
+		.rdy(RDY),
+		.rst(cpu_reset),
+		.irq(IRQ),
+		.nmi(NMI),
+		.so(0),
+		.sync(sync));
+	bc6502 (
+	     .clk(clk),
+	     .reset(cpu_reset),
+	     .ma(cpu_address),
+	     .di(D_in),
+	     .do(D_out),
+	     .rw(rd),
+	     .irq(IRQ),
+	     .nmi(NMI),
+	     .rdy(RDY) );*/
     // ------------------------------------------------------------------------------------
 
 
@@ -266,7 +289,7 @@ module top (
 
     reg [3:0] keyboard_row,graphics_mode,Port_C_low,Port_C_high;
     reg [7:0] keyboard_input;
-    wire [7:0] PIO_out;
+    reg [7:0] PIO_out;
 
     `pull_up(rept_key,  rept_key_t,		rept_keyp)
     `pull_up(shift_key, shift_keyt,		shift_keyp)
@@ -287,8 +310,6 @@ module top (
 
 	    end else begin
 	        // grab keyboard_input
-	        keyboard_input <= { shift_keyp, ctrl_keyp, key_colp };
-	        Port_C_high <= { vga_vsync_out, rept_keyp, 2'b11};
 	        // latch writes to PIO
 	        if (IO_wr & PIO_select) begin
 	            if (cpu_address[1:0]==2'b00) begin
@@ -324,11 +345,12 @@ module top (
 	end
 	assign key_row = key_demux;
 
-    assign PIO_out = (PIO_select==0) ? 0 :
+    always@(*) begin
+	    PIO_out = (PIO_select==0) ? 0 :
                     (cpu_address[1:0]==2'b00) ? { graphics_mode, keyboard_row } :
-                    (cpu_address[1:0]==2'b01) ? keyboard_input :
-                    (cpu_address[1:0]==2'b10) ? { Port_C_high, Port_C_low} : 8'hFF;
-    
+                    (cpu_address[1:0]==2'b01) ? { shift_keyp, ctrl_keyp, key_colp } :
+                    (cpu_address[1:0]==2'b10) ? { vga_vsync_out, rept_keyp, 2'b11, Port_C_low} : 8'hFF;
+	end
 	// ------------------------------------------------------------------------------------
 	// VGA registers:
 	// #BC00 - #BFFF
@@ -409,7 +431,7 @@ module top (
     begin
 		if (reboot)
 		begin
-			dma_addr <= 19'h09000;
+			dma_addr <= 19'h07fff;
 			boot <= 1;
 		end
 		else
@@ -422,7 +444,7 @@ module top (
     // ------------------------------------------------------------------------------------
     // VGA signal generation
 	// ------------------------------------------------------------------------------------
-    wire [12:0] vdu_address;
+    wire [18:0] vdu_address;
     wire [2:0] vid_page = 0;
     wire [5:0] vga_rgb;
 	wire vga_hsync_out,vga_vsync_out;
@@ -477,6 +499,10 @@ module top (
     reg [18:0] bus_address;
     reg nWE,nOE,OE;
 
+`ifdef verilator
+	assign sram_din = OE? 0 : SRAM_D;
+	assign SRAM_D = OE? sram_dout:16'hZZZZ;
+`else
     SB_IO #(
         .PIN_TYPE(6'b 1010_01),
         .PULLUP(1'b 0)
@@ -486,18 +512,23 @@ module top (
         .D_OUT_0(sram_dout),
         .D_IN_0(sram_din)
     );
-
+`endif
 	// Bus arbitrator for video, BootDMA and CPU
 	reg [18:0] bus_selected;
 
 	always@(*)
 	begin
+		nOE = 1;
+		OE = 0;
+		nWE = 1;
+		bus_selected = 19'h00000;
+		sram_dout = 16'h0000;	
 		if (clk)
 			begin
+				nWE = 1;
 				nOE = 0;
 				OE = 0;
-				nWE = 1;
-				bus_selected = { 6'b000100, vdu_address[12:0] };
+				bus_selected = vdu_address ;// ////{ 6'b000100, vdu_address[12:0] };
 				sram_dout = 16'h0000;
 			end
 		else
@@ -512,7 +543,7 @@ module top (
 					end 
 				else
 					begin
-						nWE = fclk | ~W_en;
+						nWE = fclk ? 1 :~W_en;
 						nOE = W_en;
 						OE = W_en;
 						bus_selected = { 3'b000,cpu_address};
@@ -535,7 +566,7 @@ module top (
 
     // --------- data bus latch ---------
     always@(posedge clk) begin
-		vid_data <= t_vid_data;
+		
 		if (IO_select)
 			D_in <= PIO_out;
 		else
@@ -545,7 +576,7 @@ module top (
 
     // --------- phi2  video data -----------    
     always@(negedge clk) begin
-		t_vid_data <= sram_din[7:0];
+		vid_data <= sram_din[7:0];
 		end
 
 endmodule
