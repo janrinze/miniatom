@@ -162,58 +162,30 @@ module top (
 	// clk is 32.5 MHz
 
 	
-	reg cpu_clock_A,cpu_clock_B,cpu_clock_C,cpu_clock_D, pha,phb;
+	reg [7:0] cpu_clock_A,cpu_clock_B,cpu_clock_C,cpu_clock_D, pha,phb;
 	
 	
-	reg vidgate, clkA,clkB,clkC,clkD;
-	
-	reg [2:0] step;
-	reg [2:0] next_step = step + 1;
-	
+	reg vidgate;
 	
 	always@(posedge fclk ) begin
 		if (~pll_locked) begin
-			cpu_clock_A <= 0;
-			cpu_clock_B <= 0;
-			cpu_clock_C <= 1;
-			cpu_clock_D <= 1;
+			cpu_clock_A <= 8'b11111101;
+			cpu_clock_B <= 8'b11011111;
+			cpu_clock_C <= 8'b11110111;
+			cpu_clock_D <= 8'b01111111;
 			//             D B C A
 			clk <= 1;
-			pha <= 0;
-			phb <= 0;
-			step <= 3'b000;
+			pha <= 8'b00001111;
+			phb <= 8'b00110011;
 			//        DDBBCCAA
 			
 		end else begin 
-			step <= next_step;
-			pha <= next_step[2];
-			phb <= next_step[1];
-
-/*
-			pha 0 0 0 0 1 1 1 1
-			phb 0 0 1 1 0 0 1 1
-			     A   B   C   D
-			
-			tmp 0 1 0 1 0 1 0 1
-			clk 0 1 0 1 0 1 0 1
-			A   0 1 1 1 1 0 0 0 
-			B   0 0 0 1 1 1 1 0
-			C   1 0 0 0 0 1 1 1
-			D   1 1 1 0 0 0 0 1
-
-*/
-
-			if (next_step[1:0] == 2'b10)
-			begin
-				cpu_clock_A <= ~next_step[2];  // 10 up
-				cpu_clock_C <= next_step[2]; // 00 up
-			end
-			if (next_step[1:0] == 2'b00)
-			begin
-				cpu_clock_B <= ~next_step[2];  // 11 up
-				cpu_clock_D <= next_step[2]; // 01 up
-			end
-			
+			pha <= {pha[0],pha[7:1]};
+			phb <= {phb[0],phb[7:1]};
+			cpu_clock_A <= { cpu_clock_A[0],cpu_clock_A[7:1]};
+			cpu_clock_B <= { cpu_clock_B[0],cpu_clock_B[7:1]};
+			cpu_clock_C <= { cpu_clock_C[0],cpu_clock_C[7:1]};
+			cpu_clock_D <= { cpu_clock_D[0],cpu_clock_D[7:1]};
 			clk <= ~clk;
 		end
 	end
@@ -230,20 +202,11 @@ module top (
     reg W_en;
     wire W_enA,W_enB,W_enC,W_enD;
     reg kbd_reset;
-    
-    wire cpu_reset = ~pll_locked | boot ;
-    
-    wire cpu_resetA,cpu_resetB,cpu_resetC,cpu_resetD;
-	reg [1:0] focus;
-
-	assign cpu_resetA = cpu_reset | ((focus == 2'b00) & ~kbd_reset);
-	assign cpu_resetB = cpu_reset | ((focus == 2'b01) & ~kbd_reset);
-	assign cpu_resetC = cpu_reset | ((focus == 2'b10) & ~kbd_reset);
-	assign cpu_resetD = cpu_reset | ((focus == 2'b11) & ~kbd_reset);
+    wire cpu_reset = ~kbd_reset | ~pll_locked | boot ;
 
 	cpu main_cpuA(
-	     .clk(cpu_clock_A),
-	     .reset(cpu_resetA),
+	     .clk(cpu_clock_A[0]),
+	     .reset(cpu_reset),
 	     .AB(cpu_addressA),
 	     .DI(DinA),
 	     .DO(D_outA),
@@ -253,8 +216,8 @@ module top (
 	     .RDY(RDY) );
 	     
 	cpu main_cpuB(
-	     .clk(cpu_clock_B),
-	     .reset(cpu_resetB),
+	     .clk(cpu_clock_B[0]),
+	     .reset(cpu_reset),
 	     .AB(cpu_addressB),
 	     .DI(DinB),
 	     .DO(D_outB),
@@ -264,8 +227,8 @@ module top (
 	     .RDY(RDY) );
 
 	cpu main_cpuC(
-	     .clk(cpu_clock_C),
-	     .reset(cpu_resetC),
+	     .clk(cpu_clock_C[0]),
+	     .reset(cpu_reset),
 	     .AB(cpu_addressC),
 	     .DI(DinC),
 	     .DO(D_outC),
@@ -275,8 +238,8 @@ module top (
 	     .RDY(RDY) );
 	     
 	cpu main_cpuD(
-	     .clk(cpu_clock_D),
-	     .reset(cpu_resetD),
+	     .clk(cpu_clock_D[0]),
+	     .reset(cpu_reset),
 	     .AB(cpu_addressD),
 	     .DI(DinD),
 	     .DO(D_outD),
@@ -286,45 +249,43 @@ module top (
 	     .RDY(RDY) );
 
     // ------------------------------------------------------------------------------------
-	//  Bus multiplex
-    // ------------------------------------------------------------------------------------
 	always@(*) begin
-		if (pha) begin
-			if (phb) 
-				cpu_address = {3'b011,cpu_addressD};
+		if (pha[0]) begin
+			if (phb[0]) 
+				cpu_address = {3'b000,cpu_addressA};
 			else
 				cpu_address = {3'b010,cpu_addressC};
 		end	else
-			if (phb)
+			if (phb[0])
 				cpu_address = {3'b001,cpu_addressB};
 			else
-				cpu_address = {3'b000,cpu_addressA};
+				cpu_address = {3'b011,cpu_addressD};
 	end
 
 	always@(*) begin
-		if (pha) begin
-			if (phb) 
-				W_en = W_enD;
+		if (pha[0]) begin
+			if (phb[0]) 
+				W_en = W_enA;
 			else
 				W_en = W_enC;
 		end	else
-			if (phb)
+			if (phb[0])
 				W_en = W_enB;
 			else
-				W_en = W_enA;
+				W_en = W_enD;
 	end
 
 	always@(*) begin
-		if (pha) begin
-			if (phb) 
-				D_out = D_outD;
+		if (pha[0]) begin
+			if (phb[0]) 
+				D_out = D_outA;
 			else
 				D_out = D_outC;
 		end else
-			if (phb)
+			if (phb[0])
 				D_out = D_outB;
 			else
-				D_out = D_outA;
+				D_out = D_outD;
 	end
 
     // ------------------------------------------------------------------------------------
@@ -358,6 +319,7 @@ module top (
 
 	// demux key row select
 	reg[9:0] key_demux;
+	reg[1:0] focus;
 	
 	wire [3:0] keyboard_row;
 	
@@ -384,7 +346,7 @@ module top (
 	// ------------------------------------------------------------------------------------
 	// IO Space
 	// ------------------------------------------------------------------------------------
-	wire [3:0] graphics_mode;
+	reg [3:0] graphics_mode;
 	wire [7:0] PIO;
 	wire IOSEL;
 	wire [5:0] color0,color1,color2,color3 ;
@@ -646,17 +608,22 @@ module top (
     assign SRAM_nUB = 1;
 	
 	// Latches so we can keep the data available for the bus clients.
+    reg [7:0] latch_SRAM_out;
     reg [7:0] t_vid_data;
 
+
+
     // --------- data bus latch ---------
-    always@(posedge cpu_clock_A) begin
+    always@(posedge cpu_clock_A[0]) begin
+		
 		if (IOSEL)
 			DinA <= PIO;
 		else
 			DinA <= sram_din[7:0];
     end
 	
-    always@(posedge cpu_clock_B) begin
+    always@(posedge cpu_clock_B[0]) begin
+		
 		if (IOSEL)
 			DinB <= PIO;
 		else
@@ -664,14 +631,16 @@ module top (
     end
 
     // --------- data bus latch ---------
-    always@(posedge cpu_clock_C) begin
+    always@(posedge cpu_clock_C[0]) begin
+		
 		if (IOSEL)
 			DinC <= PIO;
 		else
 			DinC <= sram_din[7:0];
     end
 	
-    always@(posedge cpu_clock_D) begin
+    always@(posedge cpu_clock_D[0]) begin
+		
 		if (IOSEL)
 			DinD <= PIO;
 		else
