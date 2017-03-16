@@ -2,7 +2,7 @@
 module IOsys (
 	input reset,
 	input clk,
-	input [15:0] address,
+	input [18:0] address,
 	input [7:0] Din,
 	output [7:0] Dout,
 	input WE,
@@ -10,7 +10,9 @@ module IOsys (
 	output [3:0] gmod,
 	output [3:0] key_row,
 	input [9:0] PIOinput,
-	output [23:0] colors
+	output [23:0] colors,
+	input [1:0] visible,
+	input [1:0] active
 );
 
     wire IO_select;
@@ -64,41 +66,55 @@ module IOsys (
 	// applications when the cassette interface is not being used.
 	// ------------------------------------------------------------------------------------
 
-    reg [3:0] keyboard_row,graphics_mode,Port_C_low,Port_C_high;
-    reg [7:0] PIO_out;
+    reg [3:0] keyboard_row[0:3],graphics_mode[0:3],Port_C_low[0:3],Port_C_high[0:3];
+    wire [7:0] PIO_out;
+    wire [1:0] select;
 
     
 	always@(posedge clk) begin
 	    if (reset) begin
-	       graphics_mode <= 4'h0;
-	       keyboard_row <=  4'hf;
-	       Port_C_low <= 4'h0;
+	       graphics_mode[0] <= 4'h0;
+	       keyboard_row[0] <=  4'hf;
+	       Port_C_low[0] <= 4'h0;
+
+	       graphics_mode[1] <= 4'h0;
+	       keyboard_row[1] <=  4'hf;
+	       Port_C_low[1] <= 4'h0;
+
+	       graphics_mode[2] <= 4'h0;
+	       keyboard_row[2] <=  4'hf;
+	       Port_C_low[2] <= 4'h0;
+
+	       graphics_mode[3] <= 4'h0;
+	       keyboard_row[3] <=  4'hf;
+	       Port_C_low[3] <= 4'h0;
 
 	    end else begin
 	        // grab keyboard_input
 	        // latch writes to PIO
 	        if (IO_wr & PIO_select) begin
 	            if (address[1:0]==2'b00) begin
-	                keyboard_row  <= Din[3:0];
-	                graphics_mode <= Din[7:4];
+	                keyboard_row[select]  <= Din[3:0];
+	                graphics_mode[select] <= Din[7:4];
 	                end
 	            if (address[1:0]==2'b10) begin
-	                Port_C_low <= Din[3:0];
+	                Port_C_low[select] <= Din[3:0];
 	                end
 	        end
         end
     end
     
-    always@(*) begin
-    PIO_out = (PIO_select==0) ? 0 :
-              (address[1:0]==2'b00) ? { graphics_mode, keyboard_row } :
-              (address[1:0]==2'b01) ? PIOinput[7:0] : //{ shift_keyp, ctrl_keyp, key_colp } :
-              (address[1:0]==2'b10) ? { PIOinput[9:8] /*vga_vsync_out, rept_keyp */, 2'b11, Port_C_low} : 8'hFF;
-	end
+    
+  
+    assign select = address[17:16];
+    assign PIO_out = (PIO_select==0) ? 0 :
+              (address[1:0]==2'b00) ? { graphics_mode[select], keyboard_row[select] } :
+              ((address[1:0]==2'b01) && (active == select)) ? PIOinput[7:0] : // only active console gets keyboard input //{ shift_keyp, ctrl_keyp, key_colp } :
+              (address[1:0]==2'b10) ? { PIOinput[9:8] /*vga_vsync_out, rept_keyp */, 2'b11, Port_C_low[select]} : 8'hFF;
 	
 	assign Dout = PIO_out;
-	assign key_row = keyboard_row;
-	assign gmod = graphics_mode;
+	assign key_row = keyboard_row[active];
+	reg [3:0] gmod_latched;
 	assign IO_sel = IO_select;
 
 	// ------------------------------------------------------------------------------------
@@ -111,31 +127,45 @@ module IOsys (
 	// ------------------------------------------------------------------------------------
 
 	// ATOM can do up to 4 colors so we map them to writeable RGB 2:2:2 registers.
-	reg [5:0] color0;
-	reg [5:0] color1;
-	reg [5:0] color2;
-	reg [5:0] color3;
+	reg [5:0] color0[0:3];
+	reg [5:0] color1[0:3];
+	reg [5:0] color2[0:3];
+	reg [5:0] color3[0:3];
 
     always@(posedge clk) begin
 	    if (reset) begin
-	       color0 <= 6'b000011;
-	       color1 <= 6'b111111;
-	       color2 <= 6'b111111;
-	       color3 <= 6'b111111;
+	       color0[0] <= 6'b000011;
+	       color1[0] <= 6'b111111;
+	       color2[0] <= 6'b111111;
+	       color3[0] <= 6'b111111;
+	       color0[1] <= 6'b000011;
+	       color1[1] <= 6'b111111;
+	       color2[1] <= 6'b111111;
+	       color3[1] <= 6'b111111;
+	       color0[2] <= 6'b000011;
+	       color1[2] <= 6'b111111;
+	       color2[2] <= 6'b111111;
+	       color3[2] <= 6'b111111;
+	       color0[3] <= 6'b000011;
+	       color1[3] <= 6'b111111;
+	       color2[3] <= 6'b111111;
+	       color3[3] <= 6'b111111;
 	    end else begin
-
+			gmod_latched <= graphics_mode[visible];
 	        // latch writes to color regs
 	        if (IO_wr & VGAIO_select) begin
 	            case (address[1:0])
-					2'b00: color0 <= Din[5:0];
-					2'b01: color1 <= Din[5:0];
-					2'b10: color2 <= Din[5:0];
-					2'b11: color3 <= Din[5:0];
+					2'b00: color0[select] <= Din[5:0];
+					2'b01: color1[select] <= Din[5:0];
+					2'b10: color2[select] <= Din[5:0];
+					2'b11: color3[select] <= Din[5:0];
 	            endcase
 	        end
         end
     end
     
-    assign colors = { color0,color1,color2,color3 };
+    assign colors = { color0[visible],color1[visible],color2[visible],color3[visible] };
 
+	assign gmod = gmod_latched;
+	
 endmodule

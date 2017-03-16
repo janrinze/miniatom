@@ -16,7 +16,7 @@ module pll(
 	output locked
 	);
 
-`ifdef verilatorf
+`ifdef verilator
 	assign clock_out = clock_in;
 	reg tlocked=0;
 	reg cnt=1;
