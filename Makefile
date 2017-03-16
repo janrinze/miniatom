@@ -8,7 +8,7 @@ SEED = 1587685918
 all: $(PROJ).rpt $(PROJ).bin
 
 %.blif: %.v vga/vga.v 
-	yosys -q -p 'proc; opt; alumacc; synth_ice40 -top top -blif $@' $<
+	yosys -q -p 'synth_ice40 -top top -blif $@' $<
 
 %.asc: $(PIN_DEF) %.blif
 	arachne-pnr -r -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^

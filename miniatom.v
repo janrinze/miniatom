@@ -162,30 +162,36 @@ module top (
 	// clk is 32.5 MHz
 
 	
-	reg [7:0] cpu_clock_A,cpu_clock_B,cpu_clock_C,cpu_clock_D, pha,phb;
-	
+	reg  cpu_clock_A,cpu_clock_B,cpu_clock_C,cpu_clock_D;
+	reg [1:0] ph;
+	wire [1:0] addph;
+	assign addph = ph + 1;
 	
 	reg vidgate;
 	
 	always@(posedge fclk ) begin
 		if (~pll_locked) begin
-			cpu_clock_A <= 8'b11111101;
-			cpu_clock_B <= 8'b11011111;
-			cpu_clock_C <= 8'b11110111;
-			cpu_clock_D <= 8'b01111111;
+			cpu_clock_A <= 0;// 8'b11111110;
+			cpu_clock_B <= 1;//8'b11101111;
+			cpu_clock_C <= 1;//8'b11111011;
+			cpu_clock_D <= 1;//8'b10111111;
 			//             D B C A
-			clk <= 1;
-			pha <= 8'b00001111;
-			phb <= 8'b00110011;
+			clk <= 0;
+			ph <= 2'b00;//8'b00001111;
+			//phb <= 0;// 8'b00110011;
 			//        DDBBCCAA
 			
-		end else begin 
-			pha <= {pha[0],pha[7:1]};
-			phb <= {phb[0],phb[7:1]};
-			cpu_clock_A <= { cpu_clock_A[0],cpu_clock_A[7:1]};
-			cpu_clock_B <= { cpu_clock_B[0],cpu_clock_B[7:1]};
-			cpu_clock_C <= { cpu_clock_C[0],cpu_clock_C[7:1]};
-			cpu_clock_D <= { cpu_clock_D[0],cpu_clock_D[7:1]};
+		end else begin
+			// advance on negedge
+			/*
+			if(~clk) begin
+				ph <= addph;
+				cpu_clock_A <= (ph==2'b00);//cpu_clock_D;
+				cpu_clock_B <= (ph==2'b01);//cpu_clock_D;
+				cpu_clock_C <= (ph==2'b10);//cpu_clock_D;
+				cpu_clock_D <= (ph==2'b11);//cpu_clock_D;
+			end*/
+			cpu_clock_A <= ~clk;
 			clk <= ~clk;
 		end
 	end
@@ -205,7 +211,7 @@ module top (
     wire cpu_reset = ~kbd_reset | ~pll_locked | boot ;
 
 	cpu main_cpuA(
-	     .clk(cpu_clock_A[0]),
+	     .clk(cpu_clock_A),
 	     .reset(cpu_reset),
 	     .AB(cpu_addressA),
 	     .DI(DinA),
@@ -216,7 +222,7 @@ module top (
 	     .RDY(RDY) );
 	     
 	cpu main_cpuB(
-	     .clk(cpu_clock_B[0]),
+	     .clk(cpu_clock_B),
 	     .reset(cpu_reset),
 	     .AB(cpu_addressB),
 	     .DI(DinB),
@@ -227,7 +233,7 @@ module top (
 	     .RDY(RDY) );
 
 	cpu main_cpuC(
-	     .clk(cpu_clock_C[0]),
+	     .clk(cpu_clock_C),
 	     .reset(cpu_reset),
 	     .AB(cpu_addressC),
 	     .DI(DinC),
@@ -238,7 +244,7 @@ module top (
 	     .RDY(RDY) );
 	     
 	cpu main_cpuD(
-	     .clk(cpu_clock_D[0]),
+	     .clk(cpu_clock_D),
 	     .reset(cpu_reset),
 	     .AB(cpu_addressD),
 	     .DI(DinD),
@@ -250,49 +256,54 @@ module top (
 
     // ------------------------------------------------------------------------------------
 	always@(*) begin
-		if (pha[0]) begin
-			if (phb[0]) 
-				cpu_address = {3'b000,cpu_addressA};
+		if (ph[1]) begin
+			if (ph[0]) 
+				cpu_address = {3'b011,cpu_addressD};
 			else
 				cpu_address = {3'b010,cpu_addressC};
-		end	else
-			if (phb[0])
+		end	else begin
+			if (ph[0])
 				cpu_address = {3'b001,cpu_addressB};
 			else
-				cpu_address = {3'b011,cpu_addressD};
+				cpu_address = {3'b000,cpu_addressA};
+		end
 	end
 
+	
+
 	always@(*) begin
-		if (pha[0]) begin
-			if (phb[0]) 
-				W_en = W_enA;
+		if (ph[1]) begin
+			if (ph[0]) 
+				W_en = W_enD;
 			else
 				W_en = W_enC;
-		end	else
-			if (phb[0])
+		end	else begin
+			if (ph[0])
 				W_en = W_enB;
 			else
-				W_en = W_enD;
+				W_en = W_enA;
+		end
 	end
 
 	always@(*) begin
-		if (pha[0]) begin
-			if (phb[0]) 
-				D_out = D_outA;
+		if (ph[1]) begin
+			if (ph[0]) 
+				D_out = D_outD;
 			else
 				D_out = D_outC;
-		end else
-			if (phb[0])
+		end else begin
+			if (ph[0])
 				D_out = D_outB;
 			else
-				D_out = D_outD;
+				D_out = D_outA;
+		end
 	end
 
     // ------------------------------------------------------------------------------------
     // reset 
 	// ------------------------------------------------------------------------------------
 	always@(posedge fclk) begin
-	    if (cpu_reset) begin
+	    if (~pll_locked) begin
 	       RDY<= 1;
 	       NMI<=0;
 	       IRQ<=0;
@@ -312,7 +323,7 @@ module top (
     `pull_N_up(key_col, key_colt,5,		key_colp)
     `pull_up(key_reset, key_reset_t, key_reset_p)
 
-	always@(posedge fclk)
+	always@(posedge cpu_clock_A)
 		begin
 		kbd_reset <= key_reset_p;
 	end
@@ -341,7 +352,24 @@ module top (
 	end
 	assign key_row = key_demux;
 
-
+	wire [1:0] next_focus = focus +1;
+	
+	
+	reg next_window;
+	reg prev_window;
+	always@(posedge clk)
+	begin
+		if (~pll_locked) begin
+			next_window <= 1;
+			prev_window <= 1;
+			focus <= 2'b00;
+		end else begin
+			prev_window <= next_window;
+			next_window <= shift_keyp | ctrl_keyp | rept_keyp;
+			if ((prev_window == 0) && (next_window==1))
+				focus <= next_focus;
+		end
+	end
 
 	// ------------------------------------------------------------------------------------
 	// IO Space
@@ -381,12 +409,7 @@ module top (
 	end
 	*/
 	
-	wire [1:0] next_focus = focus +1;
-	
-	wire next_window = shift_keyp | ctrl_keyp | rept_keyp;
-	
-	always@(posedge next_window)
-		focus <= next_focus;
+
 	
 /*	
 	always@(*) begin
@@ -501,11 +524,12 @@ module top (
 	
     reg reboot;
 
-    always @(*)
+    always @(posedge cpu_clock_A)
     begin
-		reboot = 0;
 		if (pll_locked==0 || (key_reset_p==0 && rept_keyp==0))
-			reboot = 1;
+			reboot <= 1;
+		else
+			reboot <= 0;
 	end
 	
 	vga display(
@@ -565,11 +589,6 @@ module top (
 
 	always@(*)
 	begin
-		nOE = 1;
-		OE = 0;
-		nWE = 1;
-		bus_selected = 19'h00000;
-		sram_dout = 16'h0000;	
 		if (clk)
 			begin
 				nWE = 1;
@@ -590,7 +609,7 @@ module top (
 					end 
 				else
 					begin
-						nWE = W_en? fclk : 1 ;//:~W_en;
+						nWE = ~W_en;//? fclk : 1 ;//:~W_en;
 						nOE = W_en;
 						OE = W_en;
 						bus_selected = cpu_address;//{ 1'b0,pha[0],phb[0],cpu_address};
@@ -611,19 +630,23 @@ module top (
     reg [7:0] latch_SRAM_out;
     reg [7:0] t_vid_data;
 
-
+	
 
     // --------- data bus latch ---------
-    always@(posedge cpu_clock_A[0]) begin
-		
+    always@(posedge cpu_clock_A) begin
+			
+//		if (cpu_address[15:12]>4'h9)
+//			DinA <= PIO|boot_data;
 		if (IOSEL)
 			DinA <= PIO;
 		else
 			DinA <= sram_din[7:0];
     end
 	
-    always@(posedge cpu_clock_B[0]) begin
+    always@(posedge cpu_clock_B) begin
 		
+//		if (cpu_address[15:12]>4'h9)
+//			DinB <= PIO|boot_data;
 		if (IOSEL)
 			DinB <= PIO;
 		else
@@ -631,16 +654,20 @@ module top (
     end
 
     // --------- data bus latch ---------
-    always@(posedge cpu_clock_C[0]) begin
+    always@(posedge cpu_clock_C) begin
 		
+//		if (cpu_address[15:12]>4'h9)
+//			DinC <= PIO|boot_data;
 		if (IOSEL)
 			DinC <= PIO;
 		else
 			DinC <= sram_din[7:0];
     end
 	
-    always@(posedge cpu_clock_D[0]) begin
+    always@(posedge cpu_clock_D) begin
 		
+//		if (cpu_address[15:12]>4'h9)
+//			DinD <= PIO|boot_data;
 		if (IOSEL)
 			DinD <= PIO;
 		else

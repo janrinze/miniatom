@@ -67,9 +67,9 @@ module IOsys (
 	// ------------------------------------------------------------------------------------
 
     reg [3:0] keyboard_row[0:3],graphics_mode[0:3],Port_C_low[0:3],Port_C_high[0:3];
-    wire [7:0] PIO_out;
+    reg [7:0] PIO_out;
     wire [1:0] select;
-
+    assign select = address[17:16];
     
 	always@(posedge clk) begin
 	    if (reset) begin
@@ -106,11 +106,17 @@ module IOsys (
     
     
   
-    assign select = address[17:16];
-    assign PIO_out = (PIO_select==0) ? 0 :
-              (address[1:0]==2'b00) ? { graphics_mode[select], keyboard_row[select] } :
-              ((address[1:0]==2'b01) && (active == select)) ? PIOinput[7:0] : // only active console gets keyboard input //{ shift_keyp, ctrl_keyp, key_colp } :
-              (address[1:0]==2'b10) ? { PIOinput[9:8] /*vga_vsync_out, rept_keyp */, 2'b11, Port_C_low[select]} : 8'hFF;
+
+    always@(*) begin
+		PIO_out = 0;
+		if (PIO_select)
+			case (address[1:0])
+			0: PIO_out = { graphics_mode[select], keyboard_row[select] } ;
+			1: PIO_out = (active == select) ? PIOinput[7:0] : 8'hff; // only active console gets keyboard input //{ shift_keyp, ctrl_keyp, key_colp } :
+            2: PIO_out = { PIOinput[9:8] /*vga_vsync_out, rept_keyp */, 2'b11, Port_C_low[select]};
+            3: PIO_out = 8'hFF;
+            endcase
+    end
 	
 	assign Dout = PIO_out;
 	assign key_row = keyboard_row[active];
@@ -164,7 +170,8 @@ module IOsys (
         end
     end
     
-    assign colors = { color0[visible],color1[visible],color2[visible],color3[visible] };
+    
+    assign colors = {((visible==active) ? 6'b000000 : color0[visible]),color1[visible],color2[visible],color3[visible] };
 
 	assign gmod = gmod_latched;
 	
