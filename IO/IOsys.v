@@ -15,7 +15,7 @@ module IOsys (
 	input [1:0] active
 );
 
-    wire IO_select;
+  wire IO_select;
 	wire PIO_select;
 	wire Extension_select;
 	wire VIA_select;
@@ -111,11 +111,11 @@ module IOsys (
 		PIO_out = 0;
 		if (PIO_select)
 			case (address[1:0])
-			0: PIO_out = { graphics_mode[select], keyboard_row[select] } ;
-			1: PIO_out = (active == select) ? PIOinput[7:0] : 8'hff; // only active console gets keyboard input //{ shift_keyp, ctrl_keyp, key_colp } :
-            2: PIO_out = { PIOinput[9:8] /*vga_vsync_out, rept_keyp */, 2'b11, Port_C_low[select]};
-            3: PIO_out = 8'hFF;
-            endcase
+        0: PIO_out = { graphics_mode[select], keyboard_row[select] } ;
+        1: PIO_out = (active == select) ? PIOinput[7:0] : 8'hff; // only active console gets keyboard input //{ shift_keyp, ctrl_keyp, key_colp } :
+        2: PIO_out = { PIOinput[9:8] /*vga_vsync_out, rept_keyp */, 2'b11, Port_C_low[select]};
+        3: PIO_out = 8'hFF;
+      endcase
     end
 	
 	assign Dout = PIO_out;

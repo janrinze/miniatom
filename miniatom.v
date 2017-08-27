@@ -16,14 +16,10 @@
 //`include "hx8k_defs.v"
 `include "vga/vga.v"
 `include "IO/IOsys.v"
-/*
-   Include the sources from Arlet's 6502 verilog implementation.
-   
-*/
-`include "../verilog-6502/ALU.v"
-`include "../verilog-6502/cpu.v"
-//`include "bc6502.v"
+
 `include "65Mhz.v"
+
+`include "Bus/cpubus.v"
 
 /*  TODO:
 
@@ -163,36 +159,27 @@ module top (
 
 	
 	reg  cpu_clock_A,cpu_clock_B,cpu_clock_C,cpu_clock_D;
-	reg [1:0] ph;
-	wire [1:0] addph;
+	reg [2:0] ph;
+	wire [2:0] addph;
 	assign addph = ph + 1;
 	
 	reg vidgate;
 	
 	always@(posedge fclk ) begin
 		if (~pll_locked) begin
-			cpu_clock_A <= 0;// 8'b11111110;
-			cpu_clock_B <= 1;//8'b11101111;
-			cpu_clock_C <= 1;//8'b11111011;
-			cpu_clock_D <= 1;//8'b10111111;
-			//             D B C A
-			clk <= 0;
-			ph <= 2'b00;//8'b00001111;
-			//phb <= 0;// 8'b00110011;
-			//        DDBBCCAA
-			
+			cpu_clock_A <= 0;
+			cpu_clock_B <= 0;
+			cpu_clock_C <= 0;
+			cpu_clock_D <= 0;
+			clk <= 1;
+			ph <= 3'b000;
 		end else begin
-			// advance on negedge
-			/*
-			if(~clk) begin
-				ph <= addph;
-				cpu_clock_A <= (ph==2'b00);//cpu_clock_D;
-				cpu_clock_B <= (ph==2'b01);//cpu_clock_D;
-				cpu_clock_C <= (ph==2'b10);//cpu_clock_D;
-				cpu_clock_D <= (ph==2'b11);//cpu_clock_D;
-			end*/
-			cpu_clock_A <= ~clk;
-			clk <= ~clk;
+			ph <= addph;
+			cpu_clock_A <= ~(addph==3'b001);//cpu_clock_D;
+			cpu_clock_B <= ~(addph==3'b011);//cpu_clock_D;
+			cpu_clock_C <= ~(addph==3'b101);//cpu_clock_D;
+			cpu_clock_D <= ~(addph==3'b111);//cpu_clock_D;
+			clk <= ~addph[0];
 		end
 	end
 
@@ -200,27 +187,44 @@ module top (
     // Main 6502 CPU
     // ------------------------------------------------------------------------------------
     wire [15:0] cpu_addressA , cpu_addressB,cpu_addressC , cpu_addressD  ;
-    reg [18:0] cpu_address;
+    wire [18:0] cpu_address;
 	reg [7:0] DinA, DinB, DinC ,DinD;
+	wire [7:0] Din;
     wire [7:0] D_outA,D_outB,D_outC,D_outD;
-    reg [7:0] D_out;
+    wire [7:0] D_out;
     reg IRQ,NMI,RDY;
-    reg W_en;
+    wire W_en;
     wire W_enA,W_enB,W_enC,W_enD;
     reg kbd_reset;
     wire cpu_reset = ~kbd_reset | ~pll_locked | boot ;
 
-	cpu main_cpuA(
+	cpubus main_cpuA(
 	     .clk(cpu_clock_A),
 	     .reset(cpu_reset),
-	     .AB(cpu_addressA),
-	     .DI(DinA),
-	     .DO(D_outA),
-	     .WE(W_enA),
+	     .AB(cpu_address),
+	     .DI(Din),
+	     .DO(D_out),
+	     .offset(3'b000),
+	     .out_en( (ph[2:1]==2'b00) ),
+	     .WE(W_en),
 	     .IRQ(IRQ),
 	     .NMI(NMI),
 	     .RDY(RDY) );
 	     
+	cpubus main_cpuB(
+	     .clk(cpu_clock_B),
+	     .reset(cpu_reset),
+	     .AB(cpu_address),
+	     .DI(Din),
+	     .DO(D_out),
+	     .offset(3'b001),
+	     .out_en( (ph[2:1]==2'b01) ),
+	     .WE(W_en),
+	     .IRQ(IRQ),
+	     .NMI(NMI),
+	     .RDY(RDY) );     
+	     
+	   /*  
 	cpu main_cpuB(
 	     .clk(cpu_clock_B),
 	     .reset(cpu_reset),
@@ -253,51 +257,44 @@ module top (
 	     .IRQ(IRQ),
 	     .NMI(NMI),
 	     .RDY(RDY) );
-
+	*/
+	
     // ------------------------------------------------------------------------------------
+    /*
 	always@(*) begin
-		if (ph[1]) begin
-			if (ph[0]) 
+		if (ph[2]) begin
+			if (ph[1]) begin
 				cpu_address = {3'b011,cpu_addressD};
-			else
+				W_en = W_enD;
+				D_out = D_outD;
+				end
+			else begin
 				cpu_address = {3'b010,cpu_addressC};
+				W_en = W_enC;
+				D_out = D_outC;
+				end
 		end	else begin
-			if (ph[0])
+			if (ph[1]) begin
 				cpu_address = {3'b001,cpu_addressB};
-			else
+				W_en = W_enB;
+				D_out = D_outB;
+				end
+			else begin
 				cpu_address = {3'b000,cpu_addressA};
+				W_en = W_enA;
+				D_out = D_outA;
+				end
 		end
 	end
+	*/
 
 	
-
-	always@(*) begin
-		if (ph[1]) begin
-			if (ph[0]) 
-				W_en = W_enD;
-			else
-				W_en = W_enC;
-		end	else begin
-			if (ph[0])
-				W_en = W_enB;
-			else
-				W_en = W_enA;
-		end
-	end
-
-	always@(*) begin
-		if (ph[1]) begin
-			if (ph[0]) 
-				D_out = D_outD;
-			else
-				D_out = D_outC;
-		end else begin
-			if (ph[0])
-				D_out = D_outB;
-			else
-				D_out = D_outA;
-		end
-	end
+	// ------------------------------------------------------------------------------------
+    // Bus timeshare 
+	// ------------------------------------------------------------------------------------
+	// assign cpu_address = ph[1] ? ( ph[2]? { 3'b011, cpu_addressD } /* 11 D */ : { 3'b010, cpu_addressC } /* 10 C */) : (ph[2]? { 3'b001, cpu_addressB } /* 01 B */ : { 3'b000, cpu_addressA } /* 00 A */);
+	// assign W_en = ph[1] ? (ph[2]? W_enD /* 11 D */ : W_enC /* 10 C */) : (ph[2]? W_enB /* 01 B */ : W_enA /* 00 A */);
+	// assign D_out = ph[1] ? (ph[2]? D_outD /* 11 D */ : D_outC /* 10 C */) : (ph[2]? D_outB /* 01 B */ : D_outA /* 00 A */);
 
     // ------------------------------------------------------------------------------------
     // reset 
@@ -496,11 +493,11 @@ module top (
     assign romaddr = dma_addr;
     
 
-    always@(posedge clk)
+    always@(negedge clk)
     begin
 		if (reboot)
 		begin
-			dma_addr <= 19'h07fff;
+			dma_addr <= 19'h009000;
 			boot <= 1;
 		end
 		else
@@ -567,7 +564,7 @@ module top (
     reg [15:0] sram_dout;
     wire [15:0] sram_din;
     reg [18:0] bus_address;
-    reg nWE,nOE,OE;
+    wire nWE,nOE,OE;
 
 `ifdef verilator
 	assign sram_din = OE? 0 : SRAM_D;
@@ -583,18 +580,18 @@ module top (
         .D_IN_0(sram_din)
     );
 `endif
+	
 	// Bus arbitrator for video, BootDMA and CPU
 	reg [18:0] bus_selected;
-
 
 	always@(*)
 	begin
 		if (clk)
 			begin
-				nWE = 1;
 				nOE = 0;
 				OE = 0;
-				bus_selected = vdu_address ;// ////{ 6'b000100, vdu_address[12:0] };
+				nWE = 1;
+				bus_selected = vdu_address;//{ 6'b000100, vdu_address[12:0] };
 				sram_dout = 16'h0000;
 			end
 		else
@@ -609,10 +606,10 @@ module top (
 					end 
 				else
 					begin
-						nWE = ~W_en;//? fclk : 1 ;//:~W_en;
+						nWE = fclk | ~W_en;
 						nOE = W_en;
 						OE = W_en;
-						bus_selected = cpu_address;//{ 1'b0,pha[0],phb[0],cpu_address};
+						bus_selected = cpu_address;//{ 3'b000,cpu_address};
 						sram_dout = {8'h00,D_out};
 					end
 			end
@@ -620,16 +617,18 @@ module top (
 
 	// Hook up our bus signals to the SRAM
 	assign SRAM_A = bus_selected;
-    assign SRAM_nCE = 0;
-    assign SRAM_nWE = nWE;
-    assign SRAM_nOE = nOE;
-    assign SRAM_nLB = 0;
-    assign SRAM_nUB = 1;
+  assign SRAM_nCE = 0;
+  assign SRAM_nWE = nWE;
+  assign SRAM_nOE = nOE;
+  assign SRAM_nLB = 0;
+  assign SRAM_nUB = 1;
 	
 	// Latches so we can keep the data available for the bus clients.
-    reg [7:0] latch_SRAM_out;
-    reg [7:0] t_vid_data;
+  reg [7:0] latch_SRAM_out;
+  reg [7:0] t_vid_data;
 
+	
+	assign Din = (IOSEL) ? PIO : sram_din[7:0];
 	
 
     // --------- data bus latch ---------
@@ -677,5 +676,9 @@ module top (
     always@(negedge clk ) begin
 		vid_data <= sram_din[7:0];
 		end
-
+    
+    //always@(negedge clk ) begin
+	//	vid_data <= t_vid_data;
+	//	end
+	
 endmodule
