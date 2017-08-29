@@ -606,7 +606,7 @@ module top (
 					end 
 				else
 					begin
-						nWE = fclk | ~W_en;
+						nWE = W_en ? fclk :1;
 						nOE = W_en;
 						OE = W_en;
 						bus_selected = cpu_address;//{ 3'b000,cpu_address};
