@@ -9,11 +9,11 @@ SEED=1660300435
 
 all: $(PROJ).rpt $(PROJ).bin
 
-%.blif: %.v vga/vga.v 
-	yosys -q -p 'synth_ice40 -top top -blif $@' $<
+%.blif: %.v 
+	yosys -q -p 'synth_ice40 -top top -abc2 -blif $@' $<
 
 %.asc: $(PIN_DEF) %.blif
-	arachne-pnr -s $(SEED) -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^
+	arachne-pnr -r -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^
 
 %.bin: %.asc
 	icepack $< $@

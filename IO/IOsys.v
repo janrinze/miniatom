@@ -71,7 +71,7 @@ module IOsys (
     wire [1:0] select;
     assign select = address[17:16];
     
-	always@(posedge clk) begin
+	always@(posedge clk or posedge reset) begin
 	    if (reset) begin
 	       graphics_mode[0] <= 4'h0;
 	       keyboard_row[0] <=  4'hf;
@@ -108,13 +108,13 @@ module IOsys (
   
 
     always@(*) begin
-		PIO_out = 0;
+		PIO_out = address[15:8] & 8'hF1;
 		if (PIO_select)
 			case (address[1:0])
         0: PIO_out = { graphics_mode[select], keyboard_row[select] } ;
         1: PIO_out = (active == select) ? PIOinput[7:0] : 8'hff; // only active console gets keyboard input //{ shift_keyp, ctrl_keyp, key_colp } :
         2: PIO_out = { PIOinput[9:8] /*vga_vsync_out, rept_keyp */, 2'b11, Port_C_low[select]};
-        3: PIO_out = 8'hFF;
+        3: PIO_out = address[15:8] & 8'hF1;
       endcase
     end
 	
@@ -138,8 +138,9 @@ module IOsys (
 	reg [5:0] color2[0:3];
 	reg [5:0] color3[0:3];
 
-    always@(posedge clk) begin
-	    if (reset) begin
+  always@(posedge clk or posedge reset) begin
+	  if (reset)
+      begin
 	       color0[0] <= 6'b000011;
 	       color1[0] <= 6'b111111;
 	       color2[0] <= 6'b111111;
@@ -156,22 +157,24 @@ module IOsys (
 	       color1[3] <= 6'b111111;
 	       color2[3] <= 6'b111111;
 	       color3[3] <= 6'b111111;
-	    end else begin
-			gmod_latched <= graphics_mode[visible];
-	        // latch writes to color regs
-	        if (IO_wr & VGAIO_select) begin
-	            case (address[1:0])
-					2'b00: color0[select] <= Din[5:0];
-					2'b01: color1[select] <= Din[5:0];
-					2'b10: color2[select] <= Din[5:0];
-					2'b11: color3[select] <= Din[5:0];
-	            endcase
+      end
+    else
+      begin
+        gmod_latched <= graphics_mode[visible];
+	      // latch writes to color regs
+	      if (IO_wr & VGAIO_select)
+          begin
+            case (address[1:0])
+              2'b00: color0[select] <= Din[5:0];
+              2'b01: color1[select] <= Din[5:0];
+              2'b10: color2[select] <= Din[5:0];
+              2'b11: color3[select] <= Din[5:0];
+	          endcase
 	        end
-        end
-    end
-    
-    
-    assign colors = {((visible==active) ? 6'b000000 : color0[visible]),color1[visible],color2[visible],color3[visible] };
+      end
+  end
+   
+  assign colors = {((visible==active) ? 6'b000000 : color0[visible]),color1[visible],color2[visible],color3[visible] };
 
 	assign gmod = gmod_latched;
 	

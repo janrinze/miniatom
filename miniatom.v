@@ -175,42 +175,38 @@ module top (
 			ph <= 3'b000;
 		end else begin
 			ph <= addph;
-			cpu_clock_A <= ~(addph==3'b001);//cpu_clock_D;
-			cpu_clock_B <= ~(addph==3'b011);//cpu_clock_D;
-			cpu_clock_C <= ~(addph==3'b101);//cpu_clock_D;
-			cpu_clock_D <= ~(addph==3'b111);//cpu_clock_D;
-			clk <= ~addph[0];
+			cpu_clock_A <= (addph!=3'b001);//cpu_clock_D;
+			cpu_clock_B <= (addph!=3'b011);//cpu_clock_D;
+			cpu_clock_C <= (addph!=3'b101);//cpu_clock_D;
+			cpu_clock_D <= (addph!=3'b111);//cpu_clock_D;
+			clk <= !addph[0];
 		end
 	end
 
     // ------------------------------------------------------------------------------------
     // Main 6502 CPU
     // ------------------------------------------------------------------------------------
-    wire [15:0] cpu_addressA , cpu_addressB,cpu_addressC , cpu_addressD  ;
     wire [18:0] cpu_address;
-	reg [7:0] DinA, DinB, DinC ,DinD;
-	wire [7:0] Din;
-    wire [7:0] D_outA,D_outB,D_outC,D_outD;
+	  wire [7:0] Din;
     wire [7:0] D_out;
     reg IRQ,NMI,RDY;
     wire W_en;
-    wire W_enA,W_enB,W_enC,W_enD;
     reg kbd_reset;
     wire cpu_reset = ~kbd_reset | ~pll_locked | boot ;
 
 	cpubus main_cpuA(
-	     .clk(cpu_clock_A),
+	     .clks({clk,cpu_clock_D,cpu_clock_C,cpu_clock_B,cpu_clock_A}),
 	     .reset(cpu_reset),
 	     .AB(cpu_address),
 	     .DI(Din),
 	     .DO(D_out),
-	     .offset(3'b000),
-	     .out_en( (ph[2:1]==2'b00) ),
+	     .offset(ph),
+	     .nextoff(addph),
 	     .WE(W_en),
 	     .IRQ(IRQ),
 	     .NMI(NMI),
 	     .RDY(RDY) );
-	     
+	     /*
 	cpubus main_cpuB(
 	     .clk(cpu_clock_B),
 	     .reset(cpu_reset),
@@ -223,81 +219,16 @@ module top (
 	     .IRQ(IRQ),
 	     .NMI(NMI),
 	     .RDY(RDY) );     
-	     
-	   /*  
-	cpu main_cpuB(
-	     .clk(cpu_clock_B),
-	     .reset(cpu_reset),
-	     .AB(cpu_addressB),
-	     .DI(DinB),
-	     .DO(D_outB),
-	     .WE(W_enB),
-	     .IRQ(IRQ),
-	     .NMI(NMI),
-	     .RDY(RDY) );
-
-	cpu main_cpuC(
-	     .clk(cpu_clock_C),
-	     .reset(cpu_reset),
-	     .AB(cpu_addressC),
-	     .DI(DinC),
-	     .DO(D_outC),
-	     .WE(W_enC),
-	     .IRQ(IRQ),
-	     .NMI(NMI),
-	     .RDY(RDY) );
-	     
-	cpu main_cpuD(
-	     .clk(cpu_clock_D),
-	     .reset(cpu_reset),
-	     .AB(cpu_addressD),
-	     .DI(DinD),
-	     .DO(D_outD),
-	     .WE(W_enD),
-	     .IRQ(IRQ),
-	     .NMI(NMI),
-	     .RDY(RDY) );
 	*/
-	
-    // ------------------------------------------------------------------------------------
-    /*
-	always@(*) begin
-		if (ph[2]) begin
-			if (ph[1]) begin
-				cpu_address = {3'b011,cpu_addressD};
-				W_en = W_enD;
-				D_out = D_outD;
-				end
-			else begin
-				cpu_address = {3'b010,cpu_addressC};
-				W_en = W_enC;
-				D_out = D_outC;
-				end
-		end	else begin
-			if (ph[1]) begin
-				cpu_address = {3'b001,cpu_addressB};
-				W_en = W_enB;
-				D_out = D_outB;
-				end
-			else begin
-				cpu_address = {3'b000,cpu_addressA};
-				W_en = W_enA;
-				D_out = D_outA;
-				end
-		end
-	end
-	*/
-
-	
 	// ------------------------------------------------------------------------------------
-    // Bus timeshare 
+  // Bus timeshare 
 	// ------------------------------------------------------------------------------------
 	// assign cpu_address = ph[1] ? ( ph[2]? { 3'b011, cpu_addressD } /* 11 D */ : { 3'b010, cpu_addressC } /* 10 C */) : (ph[2]? { 3'b001, cpu_addressB } /* 01 B */ : { 3'b000, cpu_addressA } /* 00 A */);
 	// assign W_en = ph[1] ? (ph[2]? W_enD /* 11 D */ : W_enC /* 10 C */) : (ph[2]? W_enB /* 01 B */ : W_enA /* 00 A */);
 	// assign D_out = ph[1] ? (ph[2]? D_outD /* 11 D */ : D_outC /* 10 C */) : (ph[2]? D_outB /* 01 B */ : D_outA /* 00 A */);
 
-    // ------------------------------------------------------------------------------------
-    // reset 
+  // ------------------------------------------------------------------------------------
+  // reset 
 	// ------------------------------------------------------------------------------------
 	always@(posedge fclk) begin
 	    if (~pll_locked) begin
@@ -320,14 +251,14 @@ module top (
     `pull_N_up(key_col, key_colt,5,		key_colp)
     `pull_up(key_reset, key_reset_t, key_reset_p)
 
-	always@(posedge cpu_clock_A)
+	always@(posedge clk)
 		begin
 		kbd_reset <= key_reset_p;
 	end
 
 	// demux key row select
 	reg[9:0] key_demux;
-	reg[1:0] focus;
+
 	
 	wire [3:0] keyboard_row;
 	
@@ -348,24 +279,38 @@ module top (
 		endcase
 	end
 	assign key_row = key_demux;
+  
+	reg[1:0] focus;
 
-	wire [1:0] next_focus = focus +1;
 	
-	
+  wire focus_toggle = !(shift_keyp | ctrl_keyp | rept_keyp);
+  
+	wire [1:0] next_focus = focus + 1;
+    
+  reg [18:0] tab_count;
+  
+  wire [18:0] next_tab = tab_count + 1;
+  
 	reg next_window;
 	reg prev_window;
 	always@(posedge clk)
 	begin
-		if (~pll_locked) begin
-			next_window <= 1;
-			prev_window <= 1;
+		if (~pll_locked)
+     begin
 			focus <= 2'b00;
-		end else begin
-			prev_window <= next_window;
-			next_window <= shift_keyp | ctrl_keyp | rept_keyp;
-			if ((prev_window == 0) && (next_window==1))
-				focus <= next_focus;
-		end
+      tab_count <= 19'h40000;
+     end
+    else
+     begin
+      if (focus_toggle)
+       begin
+        if (tab_count[18]==0)
+          focus <= next_focus;         
+        tab_count <= 19'h40000;
+       end
+      else
+       if (tab_count[18]) tab_count <= next_tab;
+		 end
 	end
 
 	// ------------------------------------------------------------------------------------
@@ -468,67 +413,63 @@ module top (
     initial $readmemh("roms/pcharme.hex"	,pcharme_rom);
     initial $readmemh("roms/floatingpoint.hex",fp_rom);
     
-    wire [18:0] romaddr;
-    wire [7:0] kernel_dat;
-    wire [7:0] basic_dat;
-    wire [7:0] pcharme_dat;
-    wire [7:0] fp_dat;
+    reg [7:0] kernel_dat;
+    reg [7:0] basic_dat;
+    reg [7:0] pcharme_dat;
+    reg [7:0] fp_dat;
     
-    
-    assign kernel_dat  = (romaddr[15:12]==4'hF) ? kernel_rom[romaddr[11:0]]  : 8'h00;
-    assign basic_dat   = (romaddr[15:12]==4'hC) ? basic_rom[romaddr[11:0]]   : 8'h00;
-    assign pcharme_dat = (romaddr[15:12]==4'hA) ? pcharme_rom[romaddr[11:0]] : 8'h00;
-    assign fp_dat      = (romaddr[15:12]==4'hD) ? fp_rom[romaddr[11:0]]      : 8'h00;
-    
-    wire [7:0] boot_data;
-        
-    assign boot_data = kernel_dat | basic_dat | pcharme_dat | fp_dat;   
-    
-    // ------------------------------------------------------------------------------------
-    // Bootloader
+  // ------------------------------------------------------------------------------------
+  // Bootloader
 	// ------------------------------------------------------------------------------------
-    reg [18:0] dma_addr;
-    wire [18:0] next_dma_addr = dma_addr + 1;
-    
-    assign romaddr = dma_addr;
-    
+  
+  reg [18:0] dma_addr;
+  wire [18:0] next_dma_addr = dma_addr + 1;
 
-    always@(negedge clk)
+  always@(posedge clk)
     begin
 		if (reboot)
 		begin
-			dma_addr <= 19'h009000;
+			dma_addr <= 19'h007000;
 			boot <= 1;
 		end
 		else
-			if (dma_addr[18]==1)
+			if (next_dma_addr[18]==1)
 				boot <= 0;
-			else
-				dma_addr <= next_dma_addr;
+			else begin
+        dma_addr <= next_dma_addr;
+      end
 	end
-    
-    // ------------------------------------------------------------------------------------
-    // VGA signal generation
+  
+  always@(posedge clk)
+    begin
+      kernel_dat  <= kernel_rom[next_dma_addr[11:0]];
+      basic_dat   <= basic_rom[next_dma_addr[11:0]];
+      pcharme_dat <= pcharme_rom[next_dma_addr[11:0]];
+      fp_dat      <= fp_rom[next_dma_addr[11:0]];
+    end
+  
+  wire [7:0] boot_data;
+  assign boot_data = (dma_addr[15:12]==4'hF) ? kernel_dat :
+                     (dma_addr[15:12]==4'hC) ? basic_dat :
+                     (dma_addr[15:12]==4'hA) ? pcharme_dat :
+                     (dma_addr[15:12]==4'hD) ? fp_dat : 8'h00;
+  
+
+  // ------------------------------------------------------------------------------------
+  // VGA signal generation
 	// ------------------------------------------------------------------------------------
-    wire [18:0] vdu_address;
-    wire [2:0] vid_page = 0;
-    wire [5:0] vga_rgb;
+  wire [18:0] vdu_address;
+  wire [2:0] vid_page = 0;
+  wire [5:0] vga_rgb;
 	wire vga_hsync_out,vga_vsync_out;
 	
 	reg [8:0] mx = 0;
 	reg [8:0] my = 0;
 	reg [5:0] mcolor = 6'b101011; // light blue
 	
-    reg reboot;
+  wire reboot = (pll_locked==0) || (key_reset_p==0 && rept_keyp==0);
 
-    always @(posedge cpu_clock_A)
-    begin
-		if (pll_locked==0 || (key_reset_p==0 && rept_keyp==0))
-			reboot <= 1;
-		else
-			reboot <= 0;
-	end
-	
+    	
 	vga display(
 		.clk( clk ),
 		.reset(reboot),
@@ -539,7 +480,7 @@ module top (
 		//.mx(mx),
 		//.my(my),
 		//.mcolor(mcolor),
-        //.dreq(dreq),
+    //.dreq(dreq),
 		.rgb(vga_rgb),
 		.hsync(vga_hsync_out),
 		.vsync(vga_vsync_out),
@@ -561,123 +502,51 @@ module top (
 	// vdu_address and cpu_addres are both latched on clk so this should be fine.
 	// ------------------------------------------------------------------------------------
 
-    reg [15:0] sram_dout;
+    wire [15:0] sram_dout;
     wire [15:0] sram_din;
-    reg [18:0] bus_address;
-    wire nWE,nOE,OE;
+    //reg [18:0] bus_address;
+    wire WriteSRAM;
+
+    assign sram_dout =  boot ? {8'h00,boot_data} : {8'h00,D_out};
+    
+    assign WriteSRAM = (boot|W_en)&!clk;
 
 `ifdef verilator
-	assign sram_din = OE? 0 : SRAM_D;
-	assign SRAM_D = OE? sram_dout:16'hZZZZ;
+	assign sram_din = WriteSRAM? 0 : SRAM_D;
+	assign SRAM_D   = WriteSRAM? sram_dout:16'hZZZZ;
 `else
     SB_IO #(
         .PIN_TYPE(6'b 1010_01),
         .PULLUP(1'b 0)
     ) sram_io [15:0] (
         .PACKAGE_PIN(SRAM_D),
-        .OUTPUT_ENABLE(OE),
+        .OUTPUT_ENABLE(WriteSRAM),
         .D_OUT_0(sram_dout),
         .D_IN_0(sram_din)
     );
 `endif
 	
 	// Bus arbitrator for video, BootDMA and CPU
-	reg [18:0] bus_selected;
-
-	always@(*)
-	begin
-		if (clk)
-			begin
-				nOE = 0;
-				OE = 0;
-				nWE = 1;
-				bus_selected = vdu_address;//{ 6'b000100, vdu_address[12:0] };
-				sram_dout = 16'h0000;
-			end
-		else
-			begin
-				if (boot)
-					begin
-						nWE = 0;
-						nOE = 1;
-						OE  = 1;
-						bus_selected = dma_addr;
-						sram_dout = {8'h00,boot_data};
-					end 
-				else
-					begin
-						nWE = W_en ? fclk :1;
-						nOE = W_en;
-						OE = W_en;
-						bus_selected = cpu_address;//{ 3'b000,cpu_address};
-						sram_dout = {8'h00,D_out};
-					end
-			end
-	end
-
+	wire [18:0] bus_selected;
+   
 	// Hook up our bus signals to the SRAM
-	assign SRAM_A = bus_selected;
+	assign SRAM_A = clk ? vdu_address :
+                  boot ? dma_addr :
+                  cpu_address;// bus_selected;
   assign SRAM_nCE = 0;
-  assign SRAM_nWE = nWE;
-  assign SRAM_nOE = nOE;
+  assign SRAM_nWE = WriteSRAM ? fclk :1;
+  assign SRAM_nOE = WriteSRAM;
   assign SRAM_nLB = 0;
   assign SRAM_nUB = 1;
 	
-	// Latches so we can keep the data available for the bus clients.
-  reg [7:0] latch_SRAM_out;
-  reg [7:0] t_vid_data;
-
-	
 	assign Din = (IOSEL) ? PIO : sram_din[7:0];
-	
-
-    // --------- data bus latch ---------
-    always@(posedge cpu_clock_A) begin
-			
-//		if (cpu_address[15:12]>4'h9)
-//			DinA <= PIO|boot_data;
-		if (IOSEL)
-			DinA <= PIO;
-		else
-			DinA <= sram_din[7:0];
-    end
-	
-    always@(posedge cpu_clock_B) begin
-		
-//		if (cpu_address[15:12]>4'h9)
-//			DinB <= PIO|boot_data;
-		if (IOSEL)
-			DinB <= PIO;
-		else
-			DinB <= sram_din[7:0];
-    end
-
-    // --------- data bus latch ---------
-    always@(posedge cpu_clock_C) begin
-		
-//		if (cpu_address[15:12]>4'h9)
-//			DinC <= PIO|boot_data;
-		if (IOSEL)
-			DinC <= PIO;
-		else
-			DinC <= sram_din[7:0];
-    end
-	
-    always@(posedge cpu_clock_D) begin
-		
-//		if (cpu_address[15:12]>4'h9)
-//			DinD <= PIO|boot_data;
-		if (IOSEL)
-			DinD <= PIO;
-		else
-			DinD <= sram_din[7:0];
-    end
-    // --------- phi2  video data -----------    
-    always@(negedge clk ) begin
-		vid_data <= sram_din[7:0];
-		end
+   
+  // --------- phi2  video data -----------    
+  always@(negedge clk ) begin
+	  vid_data <= sram_din[7:0];
+  end
     
-    //always@(negedge clk ) begin
+  //always@(negedge clk ) begin
 	//	vid_data <= t_vid_data;
 	//	end
 	
