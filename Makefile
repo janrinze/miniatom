@@ -3,15 +3,16 @@ DEVICE = hx8k
 BOARD = icoboard
 PIN_DEF = $(PROJ)_$(BOARD).pcf
 END_SPEED = 33
-SEED = 1587685918
+
+SEED=1324342350
 
 all: $(PROJ).rpt $(PROJ).bin
 
 %.blif: %.v vga/vga.v 
-	yosys -q -p 'synth_ice40 -top top -blif $@' $<
+	yosys -p 'synth_ice40  -abc2 -top top -blif $@' $< > YOSYS.LOG
 
 %.asc: $(PIN_DEF) %.blif
-	arachne-pnr -s $(SEED) -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^
+	arachne-pnr -s $(SEED) -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^ 
 
 %.bin: %.asc
 	icepack $< $@
@@ -19,8 +20,16 @@ all: $(PROJ).rpt $(PROJ).bin
 %.rpt: %.asc
 	icetime -d $(DEVICE) -mtr $@ $<
 
+rewire:
+	rm -f $(PROJ).asc $(PROJ).rpt $(PROJ).bin
+	make
+
 prog: $(PROJ).bin
 	iceprog $<
+
+icoboard: $(PROJ).bin
+	icoprog -f < $<
+	icoprog -b
 
 sudo-prog: $(PROJ).bin
 	@echo 'Executing prog as root!!!'

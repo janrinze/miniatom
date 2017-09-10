@@ -1,6 +1,9 @@
 #
 # I/O pins for ICOboard
 #
+set_io --warn-no-port led1 C8
+set_io --warn-no-port led2 F7
+set_io --warn-no-port led3 K9
 
 set_io pclk R9
 
@@ -8,16 +11,26 @@ set_io pclk R9
 #set_io TXD B12
 #set_io RXD B10
 
-set_io hsync B4
-set_io vsync B5
+#set_io hsync B4
+#set_io vsync B5
+# RGB 2:2:2
+#set_io rgb[0] B3
+#set_io rgb[1] C3
+#set_io rgb[2] B7
+#set_io rgb[3] A5
+#set_io rgb[4] B6
+#set_io rgb[5] A2
+
+set_io hsync N6
+set_io vsync N7
 
 # RGB 2:2:2
-set_io rgb[0] B3
-set_io rgb[1] C3
-set_io rgb[2] B7
-set_io rgb[3] A5
-set_io rgb[4] B6
-set_io rgb[5] A2
+set_io rgb[0] M8
+set_io rgb[1] L7
+set_io rgb[2] N9
+set_io rgb[3] L9
+set_io rgb[4] P9
+set_io rgb[5] G5
 
 set_io key_col[0] 	F11
 set_io key_col[1]	E14
@@ -84,6 +97,26 @@ set_io SRAM_nWE  T7
 set_io SRAM_nOE  L5
 set_io SRAM_nLB  J4
 set_io SRAM_nUB  J3
+
+# SD Card
+#set_io ss       D8
+#set_io mosi     B9
+#set_io sclk     B10
+#set_io miso     B11
+
+
+# SD Card
+#set_io ss       N9
+#set_io mosi     P9
+#set_io sclk     M8
+#set_io miso     N7
+
+
+# SD Card
+set_io ss       T15
+set_io mosi     T14
+set_io sclk     T11
+set_io miso     R10
 
 
 #set_io SPI_FLASH_CS   R12

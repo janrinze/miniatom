@@ -45,6 +45,14 @@
 
 `include "vga/charGen.v"
 
+module duplic(
+  input in,
+  output [1:0] out
+  );
+  assign out={in,in};
+endmodule
+
+
 module 	vga (
 		input clk,
 		input reset,
@@ -62,7 +70,7 @@ module 	vga (
 
 reg [9:0] hor_counter;
 reg [9:0] vert_counter;
-reg [7:0] curpixeldat;
+reg [15:0] curpixeldat;
 reg [3:0] char_line;
 reg [4:0] hor_pos;
 reg [7:0] vert_pos;
@@ -89,20 +97,48 @@ wire vs_start     = vert_counter == 767+3;
 wire vs_stop      = vert_counter == 767+3+6;
 */
 wire textmode	  = settings[3]==1'b0;
-wire invert	      = textmode & data[7];
+reg invert;	      
 wire c_restart    = char_line==4'b1011;
 wire next_byte    = hor_counter[3:0] == 4'b0000;
 wire next_line    = vert_counter[1:0] == 2'b11;
 
-reg h_sync,v_sync,pixel,bg,invs;
-
+reg h_sync,v_sync,bg,invs;
+reg [5:0] pixel;
 
 wire [7:0] textchar  ;// = charmap[{data[5:0],char_line }];
+wire [15:0] Dtextchar;
+reg [15:0] Dgraph;
+wire [15:0] Ddata;
+wire highres;
+
+duplic txt [7:0] (textchar,Dtextchar);
+duplic dta [7:0] (data,Ddata);
+assign highres = (settings==4'hf)|(settings==4'h0);
 
 charGen charmap (
 	.address({data[5:0],char_line}),
 	.dout(textchar)
 );
+
+// special mode using blocks
+wire [1:0] p1,p2,p3,p4,p5,p6;
+
+assign p1 = {data[5]&~data[7],data[5]};
+assign p2 = {data[4]&~data[7],data[4]};
+assign p3 = {data[3]&~data[7],data[3]};
+assign p4 = {data[2]&~data[7],data[2]};
+assign p5 = {data[1]&~data[7],data[1]};
+assign p6 = {data[0]&~data[7],data[0]};
+
+
+always @* begin
+  case (char_line[3:2])
+  0 : Dgraph = {{4{p1}},{4{p2}}};
+  1 : Dgraph = {{4{p3}},{4{p4}}};
+  default : Dgraph = {{4{p5}},{4{p6}}};
+  endcase
+end
+  
 
 always@(posedge clk) begin
 	if (reset) begin
@@ -116,6 +152,7 @@ always@(posedge clk) begin
 		hor_pos<=0;
 		vert_pos<=0;
 		tvert_pos<=0;
+    invert <=0;
 	end else begin
 		if (hor_restart) begin
 		    hor_counter <= 0;
@@ -147,19 +184,30 @@ always@(posedge clk) begin
 				char_line <= char_line +1;
 		end
 
-		
-	    if (hor_counter[3:0]==4'b1111)
-	    begin
-	        invs <= invert;
-		if  (textmode)
-	          curpixeldat <= textchar;
-	        else
-	          curpixeldat <= data;
-	    end
-	    else if (hor_counter[0]==1'b1) 
-			curpixeldat <= {curpixeldat[6:0],1'b0}; //shift_left	
+	    if (hor_counter[3:0]==4'b1111) 
+        case ({data[7:6],settings})
+          6'b00_0000 : curpixeldat <= Dtextchar; // text mode
+	        6'b10_0000 : curpixeldat <= ~Dtextchar; // text mode
+          6'b01_0000 : curpixeldat <= Dgraph; // text mode
+          6'b11_0000 : curpixeldat <= Dgraph; // text mode
+          
+	        default:  curpixeldat <= highres ?Ddata:{data,8'h00};
+	      endcase
+	    else 
+        if (highres) begin
+          if (hor_counter[0]==1'b1) 
+            curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left	
+        end
+        else
+          if (hor_counter[1:0]==2'b11)
+            curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left
+    case(curpixeldat[15:14])
+    0:      pixel <= color0;
+    1:      pixel <= color1;
+    2:      pixel <= color2;
+    3:      pixel <= color3;
+    endcase
 
-		pixel <= (invs ^ curpixeldat[7])  & hor_valid & vert_valid;
 		bg <= hor_valid & vert_valid; 
 		
 		// generate sync pulses  
@@ -180,6 +228,6 @@ assign address = (textmode) ? {4'b000,tvert_pos,hor_pos}:{ vert_pos,hor_pos};
 assign hsync = h_sync;
 assign vsync = v_sync;
 
-assign rgb  = pixel ? color1 : ( bg ? color0 : 6'b000000 );
+assign rgb  =  bg ? pixel : 6'b000000;
 
 endmodule
