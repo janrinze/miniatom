@@ -62,11 +62,49 @@ module 	vga (
 		output [5:0] rgb,
 		output hsync,
 		output vsync,
-		input [5:0] color0,
-		input [5:0] color1,
-		input [5:0] color2,
-		input [5:0] color3		
+    // register access
+    input cpuclk,
+    input cs,
+    input we,
+    input [3:0] cpu_address,
+    input [7:0] Din
 );
+
+	// ------------------------------------------------------------------------------------
+	// VGA registers:
+	// #BC00 - #BFFF
+	//
+	//   T.B.D.
+	// 4 bit RGB output.
+	// 
+	// ------------------------------------------------------------------------------------
+
+	// ATOM can do up to 4 colors so we map them to writeable RGB 2:2:2 registers.
+	reg [5:0] color0;
+	reg [5:0] color1;
+	reg [5:0] color2;
+	reg [5:0] color3;
+  
+ always@(posedge we or posedge reset) begin
+  if (reset) begin
+    color0 <= 6'b000011; 
+    color1 <= 6'b001001;
+    color2 <= 6'b110000;
+    color3 <= 6'b111111;
+    end 
+  else
+    begin  // latch writes to color regs
+      if (cs) begin
+        case (cpu_address[1:0])
+          2'b00: color0 <= Din[5:0];
+          2'b01: color1 <= Din[5:0];
+          2'b10: color2 <= Din[5:0];
+          2'b11: color3 <= Din[5:0];
+        endcase
+       end
+    end
+  end
+
 
 reg [9:0] hor_counter;
 reg [9:0] vert_counter;
@@ -188,9 +226,8 @@ always@(posedge clk) begin
         case ({data[7:6],settings})
           6'b00_0000 : curpixeldat <= Dtextchar; // text mode
 	        6'b10_0000 : curpixeldat <= ~Dtextchar; // text mode
-          6'b01_0000 : curpixeldat <= Dgraph; // text mode
-          6'b11_0000 : curpixeldat <= Dgraph; // text mode
-          
+          6'b01_0000 : curpixeldat <= Dgraph; // text mode blocks
+          6'b11_0000 : curpixeldat <= Dgraph; // text mode blocks
 	        default:  curpixeldat <= highres ?Ddata:{data,8'h00};
 	      endcase
 	    else 
@@ -201,11 +238,12 @@ always@(posedge clk) begin
         else
           if (hor_counter[1:0]==2'b11)
             curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left
+
     case(curpixeldat[15:14])
-    0:      pixel <= color0;
-    1:      pixel <= color1;
-    2:      pixel <= color2;
-    3:      pixel <= color3;
+      0:  pixel <= color0;
+      1:  pixel <= color1;
+      2:  pixel <= color2;
+      3:  pixel <= color3;
     endcase
 
 		bg <= hor_valid & vert_valid; 

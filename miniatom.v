@@ -14,6 +14,7 @@
 
 
 `include "vga/vga.v"
+`include "PIA8255/pia8255.v"
 `include "utils/debounce.v"
 /*
    Include the sources from Arlet's 6502 verilog implementation.
@@ -144,14 +145,48 @@ module top (
   
 );
 
-    // ------------------------------------------------------------------------------------
-    // Clock generation
-    // ------------------------------------------------------------------------------------
-
-    wire fclk;			// 100 MHz clock icoboard
-    wire pll_locked;	// signal when pll has reached lock
+  // clock signals
+  wire fclk;			// 100 MHz clock icoboard
+  wire pll_locked;	// signal when pll has reached lock
 	reg reset=1;		// global reset register
 
+  reg clk,vidclk,spiclk;			// 32.5 MHz derived system clock
+	reg boot;
+  wire ready;
+  
+  // reset signals
+  wire kbd_reset;
+  wire cpu_reset = kbd_reset | ~pll_locked | boot;
+  wire reboot_req; 
+  
+  // CPU Bus signals
+  wire [15:0] cpu_address;
+  reg [7:0] D_in;
+  wire [7:0] D_out;
+  wire W_en;
+  reg wg;
+
+  reg IRQ,NMI,RDY;  
+  // Latched CPU signals  
+  reg [15:0] Lcpu_address;
+  reg [7:0] LD_out;
+  reg LW_en;
+  
+
+
+
+
+  // VGA bus and signals
+  wire [12:0] vdu_address;
+  reg [7:0] vid_data;
+  reg [7:0] t_vid_data;
+	wire [5:0] vga_rgb;
+	wire vga_hsync_out,vga_vsync_out;
+  
+  
+  // ------------------------------------------------------------------------------------
+  // Clock generation
+  // ------------------------------------------------------------------------------------
 	
 /* 65 MHz	*/
     SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
@@ -179,25 +214,10 @@ module top (
                          .BYPASS(1'b0)
                         );
 
-
-
-
-
-	
 	// fclk is 120 MHz
   // spiclk is 60 Mhz
   // clk is 30 MHz
 	// vidclk is 30 MHz
-  
-  reg clk,vidclk,spiclk;			// 32.5 MHz derived system clock
-	reg boot;
-
-    wire [15:0] cpu_address;
-    reg [7:0] D_in;
-    wire [7:0] D_out;
-    wire W_en;
-  reg wg;
-  wire ready;
 
 `ifdef FAST_CPU  
   // 30 MHz cpu
@@ -210,6 +230,11 @@ module top (
     clk <= ~nxtcnt[1] ;
     wg  <= (nxtcnt!=3)|~(W_en | boot) ;
     cnt<=nxtcnt;
+    if (nxtcnt==0) begin
+      Lcpu_address <= cpu_address;
+      LD_out <= D_out;
+      LW_en <= W_en;
+    end
 	end
 `else
   // 15Mhz cpu
@@ -223,16 +248,11 @@ module top (
     wg  <= (nxtcnt!=31)|~(W_en | boot) ;
     cnt<=nxtcnt;
 	end
-`endif  
-    // ------------------------------------------------------------------------------------
-    // Main 6502 CPU
-    // ------------------------------------------------------------------------------------
+`endif
 
-    reg IRQ,NMI,RDY;
-
-    wire kbd_reset;
-
-    wire cpu_reset = kbd_reset | ~pll_locked | boot;
+  // ------------------------------------------------------------------------------------
+  // Main 6502 CPU
+  // ------------------------------------------------------------------------------------
 
 	cpu main_cpu(
 	     .clk(clk),
@@ -244,17 +264,6 @@ module top (
 	     .IRQ(0),
 	     .NMI(0),
 	     .RDY(1) );
-    // ------------------------------------------------------------------------------------
-
-  
-
-    // ------------------------------------------------------------------------------------
-    // reset 
-	// ------------------------------------------------------------------------------------
-
-	// ------------------------------------------------------------------------------------
-	    
-
 
 	// ------------------------------------------------------------------------------------
 	// IO_space
@@ -268,6 +277,7 @@ module top (
 	wire VGAIO_select;
 	wire IO_wr;
   wire SDcard_select;
+  wire [7:0] IO_out;
 
 	assign IO_select        = (cpu_address[15:12]==4'hB) ? 1 : 0         ; // #BXXX address
 	assign PIO_select       = (cpu_address[11:10]==2'h0) ? IO_select : 0 ; // #B000 - #B3FF is PIO
@@ -313,54 +323,30 @@ module top (
 	// applications when the cassette interface is not being used.
 	// ------------------------------------------------------------------------------------
 
-    reg [3:0] keyboard_row,graphics_mode,Port_C_low;
-    reg [3:0] Port_C_high;
-    reg [7:0] keyboard_input;
-    wire [7:0] PIO_out;
+  wire [7:0] piaPortA , PIO_out;
+  wire unused,Speaker,CassOutEn,TapeOut;
 
-    `pull_up(rept_key,  rept_key_t,		rept_keyp)
-    `pull_up(shift_key, shift_keyt,		shift_keyp)
-    `pull_up(ctrl_key,  ctrl_keyt,		ctrl_keyp)
-    `pull_N_up(key_col,  key_colt,5,		key_colp)
-    `pull_up(key_reset, key_reset_t, key_reset_p)
+  // interface to Keyboard
+  wire [3:0] keyboard_row,graphics_mode;
+  assign keyboard_row = piaPortA[3:0];
+  assign graphics_mode = piaPortA[7:4];
+
+  `pull_up(rept_key,  rept_key_t,		rept_keyp)
+  `pull_up(shift_key, shift_keyt,		shift_keyp)
+  `pull_up(ctrl_key,  ctrl_keyt,		ctrl_keyp)
+  `pull_N_up(key_col,  key_colt,5,		key_colp)
+  `pull_up(key_reset, key_reset_t, key_reset_p)
 
   PushButton_Debouncer rstkey(
     .clk(vidclk),
     .PB(key_reset_p),
     .PB_state(kbd_reset));
-	        // grab keyboard_input  
-  wire reboot_req = ~pll_locked | (kbd_reset & ~rept_keyp);  
-          
-	always@(posedge clk) begin
-	    if (reboot_req) begin
-	       graphics_mode <= 4'h0;
-	       keyboard_row <=  4'hf;
-	       Port_C_low <= 4'h0;
-
-	    end else begin
-
-	        keyboard_input <= { shift_keyp, ctrl_keyp, key_colp };
-          Port_C_high <= { vga_vsync_out, rept_keyp, 2'b11};
-	        // latch writes to PIO
-	        if (PIO_select && W_en) begin
-	            if (cpu_address[1:0]==2'b00) begin
-	                keyboard_row  <= D_out[3:0];
-	                graphics_mode <= D_out[7:4];
-	                end
-	            if (cpu_address[1:0]==2'b10) begin
-	                Port_C_low <= D_out[3:0];
-	                end
-              if (cpu_address[1:0]==2'b11) begin
-                  if (!D_out[7]) Port_C_low[D_out[2:1]] <= D_out[0];
-                  end
-	        end
-        end
-    end
-
+  
 	// demux key row select
 	reg[9:0] key_demux;
-	
-	always@(keyboard_row)
+	assign key_row = key_demux;
+  	
+	always@*
 	begin
 		case (keyboard_row)
 		4'h0: key_demux=10'b1111111110;
@@ -376,20 +362,37 @@ module top (
 		default: key_demux=10'b1111111111;
 		endcase
 	end
-	assign key_row = key_demux;
-    wire [7:0] sd_out;
-    assign PIO_out = (SDcard_select)? sd_out:
-                    (PIO_select==0) ? 0 :
-                    (cpu_address[1:0]==2'b00) ? { graphics_mode, keyboard_row } :
-                    (cpu_address[1:0]==2'b01) ? keyboard_input :
-                    (cpu_address[1:0]==2'b10) ? { Port_C_high, Port_C_low} : 8'hFF;
+  
+  assign reboot_req = ~pll_locked | (kbd_reset & ~rept_keyp);  
+  reg [3:0] Chigh;
+  always @*
+    Chigh <= {vga_vsync_out, rept_keyp, 2'b00};
+
+  // connect PIA to keyboard and VGA generator.
+  PIA8255 pia (
+    .clk(clk),
+    .cs(PIO_select),
+    .reset(reboot_req),
+    .address(cpu_address[1:0]),
+    .Din(D_out),
+    .we(wg),
+    .PIAout(PIO_out),
+    .Port_A(piaPortA),
+    .Port_B({shift_keyp, ctrl_keyp, key_colp}),
+    .Port_C_low({unused,Speaker,CassOutEn,TapeOut}),
+    .Port_C_high(Chigh)
+  );
+
+  
+
+  wire [7:0] sd_out;
+  assign IO_out = (SDcard_select)? sd_out: PIO_out;
 
     spi sdcard
   (
    .clk(spiclk),
    .reset(cpu_reset),
    .enable(SDcard_select),
-   //.ready(ready),
    .rnw(wg|boot),
    .addr(cpu_address[2:0]),
    .din(D_out),
@@ -399,46 +402,13 @@ module top (
    .ss(ss),
    .sclk(sclk)
    );
-	// ------------------------------------------------------------------------------------
-	// VGA registers:
-	// #BC00 - #BFFF
-	//
-	//   T.B.D.
-	// 4 bit RGB output.
-	// 
+   
+
+
+  // ------------------------------------------------------------------------------------
+  // MOS ROM, BASIC ROM and minimal RAM
 	// ------------------------------------------------------------------------------------
 
-	// ATOM can do up to 4 colors so we map them to writeable RGB 2:2:2 registers.
-	reg [5:0] color0;
-	reg [5:0] color1;
-	reg [5:0] color2;
-	reg [5:0] color3;
-
-    always@(posedge clk) begin
-	    if (reboot_req) begin
-	       color0 <= 6'b000011;
-	       color1 <= 6'b001001;
-	       color2 <= 6'b110000;
-	       color3 <= 6'b111111;
-	    end else begin
-
-	        // latch writes to color regs
-	        if (IO_wr & VGAIO_select) begin
-	            case (cpu_address[1:0])
-					2'b00: color0 <= D_out[5:0];
-					2'b01: color1 <= D_out[5:0];
-					2'b10: color2 <= D_out[5:0];
-					2'b11: color3 <= D_out[5:0];
-	            endcase
-	        end
-        end
-    end
-
-
-    // ------------------------------------------------------------------------------------
-    // MOS ROM, BASIC ROM and minimal RAM
-	// ------------------------------------------------------------------------------------
-    reg [7:0] vid_data;
 
     reg [7:0] kernel_rom[0:4095];
     reg [7:0] basic_rom[0:4095];
@@ -473,8 +443,9 @@ module top (
         
     //assign boot_data = kernel_dat | basic_dat | pcharme_dat | fp_dat;   
     assign boot_data = kernel_dat | basic_dat | sddos_dat | fp_dat;   
-    // ------------------------------------------------------------------------------------
-    // Bootloader
+
+  // ------------------------------------------------------------------------------------
+  // Bootloader
 	// ------------------------------------------------------------------------------------
     reg [16:0] dma_addr;
     wire [16:0] next_dma_addr = dma_addr + 1;
@@ -482,26 +453,23 @@ module top (
     assign romaddr = dma_addr;
     
     
-    always@(posedge clk)
-    begin
-		if (reboot_req)
-		begin
-			dma_addr <= 17'hC000;
-			boot <= 1;
-		end
-		else
-			if (dma_addr[16])
-				boot <= 0;
-			else
-				dma_addr <= next_dma_addr;
-	end
+    always@(posedge clk) begin
+      if (reboot_req)
+        begin
+          dma_addr <= 17'hC000;
+          boot <= 1;
+        end
+      else
+        if (dma_addr[16])
+          boot <= 0;
+        else
+          dma_addr <= next_dma_addr;
+    end
     
-    // ------------------------------------------------------------------------------------
-    // VGA signal generation
+  // ------------------------------------------------------------------------------------
+  // VGA signal generation
 	// ------------------------------------------------------------------------------------
-  wire [12:0] vdu_address;
-	wire [5:0] vga_rgb;
-	wire vga_hsync_out,vga_vsync_out;
+
 	
 	vga display(
 		.clk( vidclk ),
@@ -512,10 +480,10 @@ module top (
 		.rgb(vga_rgb),
 		.hsync(vga_hsync_out),
 		.vsync(vga_vsync_out),
-		.color0(color0),
-		.color1(color1),
-		.color2(color2),
-		.color3(color3)
+    .cs(VGAIO_select),
+    .we(wg),
+    .cpu_address(cpu_address[3:0]),
+    .Din(D_out)
 		);
 		
     
@@ -563,19 +531,28 @@ module top (
 
 	
     reg [7:0] latch_SRAM_out;
-    reg [7:0] t_vid_data;
+
     reg [7:0] tDin;
-    // --------- data bus latch ---------
-    always@(posedge vidclk) 
-		vid_data <=t_vid_data;
- /*       
+
+
+    // --------- phi2  video data -----------    
+    always@(negedge vidclk) begin
+      t_vid_data <= sram_din[7:0];
+		end
+    
+    always@(posedge vidclk) begin
+      vid_data <=t_vid_data;
+    end
+    
+/*       
     assign D_in = IO_select? PIO_out:sram_din[7:0];
 */    
+    // --------- data bus latch ---------
     always@(posedge clk) begin
-		if (IO_select)
-			D_in <= PIO_out;
-		else
-			D_in <= sram_din[7:0];
+      if (IO_select)
+        D_in <= IO_out;
+      else
+        D_in <= sram_din[7:0];
     end
 
     // shiftlock led  
@@ -584,9 +561,6 @@ module top (
     
     assign led1 = lock;
     
-    // --------- phi2  video data -----------    
-    always@(negedge vidclk) begin
-      t_vid_data <= sram_din[7:0];
-		end
+
 
 endmodule
