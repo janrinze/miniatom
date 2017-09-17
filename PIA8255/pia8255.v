@@ -1,6 +1,5 @@
 
 module PIA8255 (
-    input clk,
     input cs,
     input reset,
     input [1:0] address,

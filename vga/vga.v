@@ -63,7 +63,6 @@ module 	vga (
 		output hsync,
 		output vsync,
     // register access
-    input cpuclk,
     input cs,
     input we,
     input [3:0] cpu_address,
@@ -116,7 +115,7 @@ reg [3:0] tvert_pos;
 
 wire hor_valid    = ~hor_counter[9];
 wire vert_valid   = (vert_counter[9:8]==3) ? 0 : 1;
-/* 60 Hz */
+// 60 Hz 
 wire hor_restart  = hor_counter == 511+12+68+80;
 wire hs_start     = hor_counter == 511+12;
 wire hs_stop	  = hor_counter == 511+12+68;
@@ -126,13 +125,13 @@ wire vs_start     = vert_counter == 767+3;
 wire vs_stop	  = vert_counter == 767+3+6;
 
 /* 75 Hz
-wire hor_restart  = hor_counter == 511+12+68+72;
-wire hs_start     = hor_counter == 511+12;
-wire hs_stop      = hor_counter == 511+12+68;
+wire hor_restart  = hor_counter == 511+8+48+88;
+wire hs_start     = hor_counter == 511+8;
+wire hs_stop      = hor_counter == 511+8+48;
 
-wire vert_restart = vert_counter == 767+3+6+29;
-wire vs_start     = vert_counter == 767+3;
-wire vs_stop      = vert_counter == 767+3+6;
+wire vert_restart = vert_counter == 767+1+3+28;
+wire vs_start     = vert_counter == 767+1;
+wire vs_stop      = vert_counter == 767+1+3;
 */
 wire textmode	  = settings[3]==1'b0;
 reg invert;	      

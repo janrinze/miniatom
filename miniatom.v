@@ -153,6 +153,7 @@ module top (
   reg clk,vidclk,spiclk;			// 32.5 MHz derived system clock
 	reg boot;
   wire ready;
+  reg phi2_we;
   
   // reset signals
   wire kbd_reset;
@@ -172,10 +173,6 @@ module top (
   reg [7:0] LD_out;
   reg LW_en;
   
-
-
-
-
   // VGA bus and signals
   wire [12:0] vdu_address;
   reg [7:0] vid_data;
@@ -191,20 +188,29 @@ module top (
 /* 65 MHz	*/
     SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
                   .PLLOUT_SELECT("GENCLK"),
-       
+                  /*       
                   // 120 MHz
                   .DIVR(4'b0100),		// DIVR =  4
                   .DIVF(7'b0101111),	// DIVF = 47
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-            
-                  /*
+*/            
+                  
                   // 130 Mhz
                   .DIVR(4'b0100),		// DIVR =  4
                   .DIVF(7'b0110011),	// DIVF = 51
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-                  */
+/*
+    // 150 MHz
+		.FEEDBACK_PATH("SIMPLE"),
+		.DIVR(4'b0000),		// DIVR =  0
+		.DIVF(7'b0000101),	// DIVF =  5
+		.DIVQ(3'b010),		// DIVQ =  2
+		.FILTER_RANGE(3'b101)	// FILTER_RANGE = 5
+
+*/
+
                  ) uut (
                          .REFERENCECLK(pclk),
                          .PLLOUTCORE(fclk),
@@ -228,7 +234,9 @@ module top (
     spiclk <= ~nxtcnt[0];
 		vidclk <= ~nxtcnt[1];
     clk <= ~nxtcnt[1] ;
+    // write gate and write cycle
     wg  <= (nxtcnt!=3)|~(W_en | boot) ;
+    phi2_we <= (W_en | boot ) & nxtcnt[1];
     cnt<=nxtcnt;
     if (nxtcnt==0) begin
       Lcpu_address <= cpu_address;
@@ -245,7 +253,9 @@ module top (
     spiclk <= ~nxtcnt[1];
 		vidclk <= ~nxtcnt[1];
     clk <= ~nxtcnt[4] ;
+    // write gate and write cycle
     wg  <= (nxtcnt!=31)|~(W_en | boot) ;
+    phi2_we <= (nxtcnt[4:1]== 15) && (W_en | boot );
     cnt<=nxtcnt;
 	end
 `endif
@@ -370,7 +380,7 @@ module top (
 
   // connect PIA to keyboard and VGA generator.
   PIA8255 pia (
-    .clk(clk),
+    //.clk(clk),
     .cs(PIO_select),
     .reset(reboot_req),
     .address(cpu_address[1:0]),
@@ -503,7 +513,7 @@ module top (
     wire [18:0] sram_addr;
     wire [15:0] sram_dout;
     wire [15:0] sram_din;
-    assign phi2_we = (W_en | boot ) & ~vidclk;
+
     SB_IO #(
         .PIN_TYPE(6'b 1010_01),
         .PULLUP(1'b 0)
@@ -520,7 +530,6 @@ module top (
 
     assign SRAM_A = vidclk ? { 6'b000100, vdu_address[12:0] } :boot ? {2'b00,dma_addr } :{ romwrite,2'b00,cpu_address};
 
-    wire phi2_we;
 
     assign SRAM_nCE = 0;
     assign SRAM_nWE =  wg  ;
