@@ -3,22 +3,24 @@ DEVICE = hx8k
 BOARD = icoboard
 PIN_DEF = $(PROJ)_$(BOARD).pcf
 END_SPEED = 33
+FOOTPRINT = ct256
+SEED=502071218
 
-SEED=282340097
+# -retime -abc2 
 
 all: $(PROJ).rpt $(PROJ).bin
 
 %.blif: %.v vga/vga.v 
-	yosys -p 'synth_ice40  -abc2 -top top -blif $@' $< > YOSYS.LOG
+	yosys -p 'synth_ice40 -top top -blif $@' $< > YOSYS.LOG
 
 %.asc: $(PIN_DEF) %.blif
-	arachne-pnr -r -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^ 
+	arachne-pnr -s $(SEED) -d $(subst hx,,$(subst lp,,$(DEVICE))) -P $(FOOTPRINT) -o $@ -p $^ 
 
 %.bin: %.asc
 	icepack $< $@
 
 %.rpt: %.asc
-	icetime -d $(DEVICE) -mtr $@ $<
+	icetime -d $(DEVICE) -tr $@ $<
 
 rewire:
 	rm -f $(PROJ).asc $(PROJ).rpt $(PROJ).bin
