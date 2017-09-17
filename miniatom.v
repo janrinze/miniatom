@@ -203,7 +203,7 @@ module top (
                   .DIVF(7'b0110011),	// DIVF = 51
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-*/                 
+                
 
     // 150 MHz
 		.FEEDBACK_PATH("SIMPLE"),
@@ -211,7 +211,13 @@ module top (
 		.DIVF(7'b0000101),	// DIVF =  5
 		.DIVQ(3'b010),		// DIVQ =  2
 		.FILTER_RANGE(3'b101)	// FILTER_RANGE = 5
-
+*/ 
+    // 160 MHz
+		.FEEDBACK_PATH("SIMPLE"),
+		.DIVR(4'b0100),		// DIVR =  4
+		.DIVF(7'b0011111),	// DIVF = 31
+		.DIVQ(3'b010),		// DIVQ =  2
+		.FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
 
 
                  ) uut (

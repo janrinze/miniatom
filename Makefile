@@ -4,7 +4,7 @@ BOARD = icoboard
 PIN_DEF = $(PROJ)_$(BOARD).pcf
 END_SPEED = 33
 
-SEED=3156017665
+SEED=282340097
 
 all: $(PROJ).rpt $(PROJ).bin
 
@@ -12,7 +12,7 @@ all: $(PROJ).rpt $(PROJ).bin
 	yosys -p 'synth_ice40  -abc2 -top top -blif $@' $< > YOSYS.LOG
 
 %.asc: $(PIN_DEF) %.blif
-	arachne-pnr -s $(SEED) -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^ 
+	arachne-pnr -r -d $(subst hx,,$(subst lp,,$(DEVICE))) -o $@ -p $^ 
 
 %.bin: %.asc
 	icepack $< $@
