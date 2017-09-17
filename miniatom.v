@@ -188,19 +188,20 @@ module top (
 /* 65 MHz	*/
     SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
                   .PLLOUT_SELECT("GENCLK"),
-                  /*       
+                       
                   // 120 MHz
                   .DIVR(4'b0100),		// DIVR =  4
                   .DIVF(7'b0101111),	// DIVF = 47
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-*/            
-                  
+            
+                  /*  
                   // 130 Mhz
                   .DIVR(4'b0100),		// DIVR =  4
                   .DIVF(7'b0110011),	// DIVF = 51
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
+                  */
 /*
     // 150 MHz
 		.FEEDBACK_PATH("SIMPLE"),
@@ -250,12 +251,12 @@ module top (
   wire [4:0] nxtcnt;
   assign nxtcnt = cnt +1;
 	always@(posedge fclk) begin
-    spiclk <= ~nxtcnt[1];
+    spiclk <= ~nxtcnt[2];
 		vidclk <= ~nxtcnt[1];
     clk <= ~nxtcnt[4] ;
     // write gate and write cycle
-    wg  <= (nxtcnt!=31)|~(W_en | boot) ;
-    phi2_we <= (nxtcnt[4:1]== 15) && (W_en | boot );
+    wg  <= (nxtcnt!=5'b11111)|~(W_en | boot) ;
+    phi2_we <= (nxtcnt[4:1]== 4'b1111) && (W_en | boot );
     cnt<=nxtcnt;
 	end
 `endif
@@ -295,7 +296,7 @@ module top (
 	assign VIA_select       = (cpu_address[11:10]==2'h2) ? IO_select : 0 ; // #B800 - #BBFF is VIA
 	assign ROMBank_select   = (cpu_address[11:8]==4'hF) ? IO_select : 0 ; // #BF00 - #BFFF is ROMBank_select
 	assign VGAIO_select     = (cpu_address[11:8]==4'hD) ? IO_select : 0 ; // #BD00 - #BDFF is VGAIO
-  assign SDcard_select    = (cpu_address[11:8]==4'hC) ? IO_select : 0 ; // #BC00 - #BCFF is SDcard SPI
+  assign SDcard_select    = (cpu_address[15: 4] == 12'hbc0);            // #BC00 - #BC0F is SDcard SPI
   
 	assign IO_wr = ~wg;
 
@@ -382,7 +383,7 @@ module top (
   PIA8255 pia (
     //.clk(clk),
     .cs(PIO_select),
-    .reset(reboot_req),
+    .reset(cpu_reset),
     .address(cpu_address[1:0]),
     .Din(D_out),
     .we(wg),
@@ -397,18 +398,21 @@ module top (
 
   wire [7:0] sd_out;
   assign IO_out = (SDcard_select)? sd_out: PIO_out;
-
+  `pull_up(miso, miso_t, miso_p)
+  wire mosi_r;
+  assign mosi= mosi_r;
+  
     spi sdcard
   (
    .clk(spiclk),
    .reset(cpu_reset),
    .enable(SDcard_select),
-   .rnw(wg|boot),
+   .rnw(wg),
    .addr(cpu_address[2:0]),
    .din(D_out),
    .dout(sd_out),
-   .miso(miso),
-   .mosi(mosi),
+   .miso(miso_p),
+   .mosi(mosi_r),
    .ss(ss),
    .sclk(sclk)
    );

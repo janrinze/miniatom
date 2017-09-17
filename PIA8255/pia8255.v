@@ -53,7 +53,7 @@ module PIA8255 (
   reg [3:0] Port_C_L;
   reg [7:0] PIAout_r;
 
-	always@(posedge we or posedge reset) begin
+	always@(posedge we, posedge reset) begin
     if (reset) begin
        Port_A_r <= 8'h0;
        Port_C_L <= 4'h0;

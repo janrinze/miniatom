@@ -122,21 +122,21 @@ module spi
                case (state)  // Address state machine                 
                  `spi_s1  : begin state <= `spi_s2;  sclk <= 1'b0; mosi <= serial_out[7]; end
                  `spi_s2  : begin state <= `spi_s3;  sclk <= 1'b1; end
-                 `spi_s3  : begin state <= `spi_s4;  sclk <= 1'b0; mosi <= serial_out[6]; dout[7] <= miso; end //serial_in
+                 `spi_s3  : begin state <= `spi_s4;  sclk <= 1'b0; mosi <= serial_out[6]; serial_in[7] <= miso; end //serial_in
                  `spi_s4  : begin state <= `spi_s5;  sclk <= 1'b1; end
-                 `spi_s5  : begin state <= `spi_s6;  sclk <= 1'b0; mosi <= serial_out[5]; dout[6] <= miso; end
+                 `spi_s5  : begin state <= `spi_s6;  sclk <= 1'b0; mosi <= serial_out[5]; serial_in[6] <= miso; end
                  `spi_s6  : begin state <= `spi_s7;  sclk <= 1'b1; end
-                 `spi_s7  : begin state <= `spi_s8;  sclk <= 1'b0; mosi <= serial_out[4]; dout[5] <= miso; end
+                 `spi_s7  : begin state <= `spi_s8;  sclk <= 1'b0; mosi <= serial_out[4]; serial_in[5] <= miso; end
                  `spi_s8  : begin state <= `spi_s9;  sclk <= 1'b1; end
-                 `spi_s9  : begin state <= `spi_s10; sclk <= 1'b0; mosi <= serial_out[3]; dout[4] <= miso; end
+                 `spi_s9  : begin state <= `spi_s10; sclk <= 1'b0; mosi <= serial_out[3]; serial_in[4] <= miso; end
                  `spi_s10 : begin state <= `spi_s11; sclk <= 1'b1; end
-                 `spi_s11 : begin state <= `spi_s12; sclk <= 1'b0; mosi <= serial_out[2]; dout[3] <= miso; end
+                 `spi_s11 : begin state <= `spi_s12; sclk <= 1'b0; mosi <= serial_out[2]; serial_in[3] <= miso; end
                  `spi_s12 : begin state <= `spi_s13; sclk <= 1'b1; end
-                 `spi_s13 : begin state <= `spi_s14; sclk <= 1'b0; mosi <= serial_out[1]; dout[2] <= miso; end
+                 `spi_s13 : begin state <= `spi_s14; sclk <= 1'b0; mosi <= serial_out[1]; serial_in[2] <= miso; end
                  `spi_s14 : begin state <= `spi_s15; sclk <= 1'b1; end
-                 `spi_s15 : begin state <= `spi_s16; sclk <= 1'b0; mosi <= serial_out[0]; dout[1] <= miso; end
+                 `spi_s15 : begin state <= `spi_s16; sclk <= 1'b0; mosi <= serial_out[0]; serial_in[1] <= miso; end
                  `spi_s16 : begin state <= `spi_s17; sclk <= 1'b1; end
-                 `spi_s17 : begin state <= `spi_s0;  sclk <= 1'b0; mosi <= 1'b0; dout[0] <= miso; end
+                 `spi_s17 : begin state <= `spi_s0;  sclk <= 1'b0; mosi <= 1'b0; dout <= {serial_in[7:1],miso}; end
                  default  : begin state <= `spi_s0; end // return to idle state
                endcase
           end
