@@ -4,7 +4,7 @@ BOARD = icoboard
 PIN_DEF = $(PROJ)_$(BOARD).pcf
 END_SPEED = 33
 
-SEED=428530696
+SEED=3156017665
 
 all: $(PROJ).rpt $(PROJ).bin
 
