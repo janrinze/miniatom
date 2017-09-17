@@ -155,6 +155,8 @@ module top (
   wire ready;
   reg phi2_we;
   
+  wire vga_req;
+  
   // reset signals
   wire kbd_reset;
   wire cpu_reset = kbd_reset | ~pll_locked | boot;
@@ -189,20 +191,20 @@ module top (
     SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
                   .PLLOUT_SELECT("GENCLK"),
                        
-                  // 120 MHz
+            /*          // 120 MHz
                   .DIVR(4'b0100),		// DIVR =  4
                   .DIVF(7'b0101111),	// DIVF = 47
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
             
-                  /*  
-                  // 130 Mhz
+                 */
+/*                  // 130 Mhz
                   .DIVR(4'b0100),		// DIVR =  4
                   .DIVF(7'b0110011),	// DIVF = 51
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-                  */
-/*
+*/                 
+
     // 150 MHz
 		.FEEDBACK_PATH("SIMPLE"),
 		.DIVR(4'b0000),		// DIVR =  0
@@ -210,7 +212,7 @@ module top (
 		.DIVQ(3'b010),		// DIVQ =  2
 		.FILTER_RANGE(3'b101)	// FILTER_RANGE = 5
 
-*/
+
 
                  ) uut (
                          .REFERENCECLK(pclk),
@@ -231,13 +233,15 @@ module top (
   reg [1:0] cnt;
   wire [1:0] nxtcnt;
   assign nxtcnt = cnt +1;
+  reg vga_cycle;
 	always@(posedge fclk) begin
     spiclk <= ~nxtcnt[0];
 		vidclk <= ~nxtcnt[1];
-    clk <= ~nxtcnt[1] ;
+    clk <= ~nxtcnt[1] | vga_req ;
+    vga_cycle <= vga_req;
     // write gate and write cycle
-    wg  <= (nxtcnt!=3)|~(W_en | boot) ;
-    phi2_we <= (W_en | boot ) & nxtcnt[1];
+    wg  <= (~nxtcnt[1])|~(W_en | boot) | vga_req ;
+    phi2_we <= (W_en | boot ) & (~vga_req);
     cnt<=nxtcnt;
     if (nxtcnt==0) begin
       Lcpu_address <= cpu_address;
@@ -494,6 +498,7 @@ module top (
 		.rgb(vga_rgb),
 		.hsync(vga_hsync_out),
 		.vsync(vga_vsync_out),
+    .req(vga_req),
     .cs(VGAIO_select),
     .we(wg),
     .cpu_address(cpu_address[3:0]),
@@ -532,7 +537,7 @@ module top (
 	// Perhaps in future we want to enable dynamic roms
 	wire romwrite = W_en & cpu_address[15] & cpu_address[14];//|cpu_address[13]) ;
 
-    assign SRAM_A = vidclk ? { 6'b000100, vdu_address[12:0] } :boot ? {2'b00,dma_addr } :{ romwrite,2'b00,cpu_address};
+    assign SRAM_A = vga_req ? { 6'b000100, vdu_address[12:0] } :boot ? {2'b00,dma_addr } :{ romwrite,2'b00,cpu_address};
 
 
     assign SRAM_nCE = 0;
@@ -547,14 +552,14 @@ module top (
 
     reg [7:0] tDin;
 
-
+/*
     // --------- phi2  video data -----------    
     always@(negedge vidclk) begin
-      t_vid_data <= sram_din[7:0];
-		end
+      if (vga_req) t_vid_data <= sram_din[7:0];
+		end*/
     
     always@(posedge vidclk) begin
-      vid_data <=t_vid_data;
+      if (vga_req) vid_data <=sram_din[7:0];
     end
     
 /*       

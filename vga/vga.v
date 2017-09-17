@@ -62,6 +62,7 @@ module 	vga (
 		output [5:0] rgb,
 		output hsync,
 		output vsync,
+    output req,
     // register access
     input cs,
     input we,
@@ -176,6 +177,7 @@ always @* begin
   endcase
 end
   
+wire req = (hor_counter[3:0]==4'b1100);
 
 always@(posedge clk) begin
 	if (reset) begin
