@@ -4,8 +4,8 @@ BOARD = icoboard
 PIN_DEF = $(PROJ)_$(BOARD).pcf
 END_SPEED = 33
 FOOTPRINT = ct256
-SEED=502071218
-
+SEED=3775152925
+# 2416205610 502071218
 # -retime -abc2 
 
 all: $(PROJ).rpt $(PROJ).bin
@@ -14,7 +14,7 @@ all: $(PROJ).rpt $(PROJ).bin
 	yosys -p 'synth_ice40 -top top -blif $@' $< > YOSYS.LOG
 
 %.asc: $(PIN_DEF) %.blif
-	arachne-pnr -s $(SEED) -d $(subst hx,,$(subst lp,,$(DEVICE))) -P $(FOOTPRINT) -o $@ -p $^ 
+	arachne-pnr -r -d $(subst hx,,$(subst lp,,$(DEVICE))) -P $(FOOTPRINT) -o $@ -p $^ 
 
 %.bin: %.asc
 	icepack $< $@

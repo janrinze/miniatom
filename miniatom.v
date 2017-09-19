@@ -15,6 +15,7 @@
 
 `include "vga/vga.v"
 `include "PIA8255/pia8255.v"
+`include "m6522/m6522.v"
 `include "utils/debounce.v"
 /*
    Include the sources from Arlet's 6502 verilog implementation.
@@ -181,7 +182,8 @@ module top (
   reg [7:0] t_vid_data;
 	wire [5:0] vga_rgb;
 	wire vga_hsync_out,vga_vsync_out;
-  
+     wire [7:0]  via_dout;
+   wire        via_irq_n;
   
   // ------------------------------------------------------------------------------------
   // Clock generation
@@ -196,29 +198,29 @@ module top (
                   .DIVF(7'b0101111),	// DIVF = 47
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-            
-                 */
-/*                  // 130 Mhz
+              */
+                
+                  // 130 Mhz
                   .DIVR(4'b0100),		// DIVR =  4
                   .DIVF(7'b0110011),	// DIVF = 51
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-                
-
+               
+ /*
     // 150 MHz
 		.FEEDBACK_PATH("SIMPLE"),
 		.DIVR(4'b0000),		// DIVR =  0
 		.DIVF(7'b0000101),	// DIVF =  5
 		.DIVQ(3'b010),		// DIVQ =  2
 		.FILTER_RANGE(3'b101)	// FILTER_RANGE = 5
-*/ 
+
     // 160 MHz
 		.FEEDBACK_PATH("SIMPLE"),
 		.DIVR(4'b0100),		// DIVR =  4
 		.DIVF(7'b0011111),	// DIVF = 31
 		.DIVQ(3'b010),		// DIVQ =  2
 		.FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-
+*/
 
                  ) uut (
                          .REFERENCECLK(pclk),
@@ -282,7 +284,7 @@ module top (
 	     .DI(D_in),
 	     .DO(D_out),
 	     .WE(W_en),
-	     .IRQ(0),
+	     .IRQ(!via_irq_n),
 	     .NMI(0),
 	     .RDY(1) );
 
@@ -305,7 +307,7 @@ module top (
 	assign Extension_select = (cpu_address[11:10]==2'h1) ? IO_select : 0 ; // #B400 - #B7FF is Extension port
 	assign VIA_select       = (cpu_address[11:10]==2'h2) ? IO_select : 0 ; // #B800 - #BBFF is VIA
 	assign ROMBank_select   = (cpu_address[11:8]==4'hF) ? IO_select : 0 ; // #BF00 - #BFFF is ROMBank_select
-	assign VGAIO_select     = (cpu_address[11:8]==4'hD) ? IO_select : 0 ; // #BD00 - #BDFF is VGAIO
+	assign VGAIO_select     = (cpu_address[11:8]==4'hD) ? 0 : 0 ; // #BD00 - #BDFF is VGAIO
   assign SDcard_select    = (cpu_address[15: 4] == 12'hbc0);            // #BC00 - #BC0F is SDcard SPI
   
 	assign IO_wr = ~wg;
@@ -407,7 +409,8 @@ module top (
   
 
   wire [7:0] sd_out;
-  assign IO_out = (SDcard_select)? sd_out: PIO_out;
+  assign IO_out = (SDcard_select)? sd_out:
+                  (VIA_select)? via_dout: PIO_out;
   `pull_up(miso, miso_t, miso_p)
   wire mosi_r;
   assign mosi= mosi_r;
@@ -427,6 +430,41 @@ module top (
    .sclk(sclk)
    );
    
+   // ===============================================================
+   // 6522 VIA at 0xB8xx
+   // ===============================================================
+
+   m6522 VIA
+     (
+      .I_RS(cpu_address[3:0]),
+      .I_DATA(D_out),
+      .O_DATA(via_dout),
+      .O_DATA_OE_L(),
+      .I_RW_L(wg),
+      .I_CS1(VIA_select),
+      .I_CS2_L(1'b0),
+      .O_IRQ_L(via_irq_n),
+      .I_CA1(1'b0),
+      .I_CA2(1'b0),
+      .O_CA2(),
+      .O_CA2_OE_L(),
+      .I_PA(8'b0),
+      .O_PA(),
+      .O_PA_OE_L(),
+      .I_CB1(1'b0),
+      .O_CB1(),
+      .O_CB1_OE_L(),
+      .I_CB2(1'b0),
+      .O_CB2(),
+      .O_CB2_OE_L(),
+      .I_PB(8'b0),
+      .O_PB(),
+      .O_PB_OE_L(),
+      .I_P2_H(clk),
+      .RESET_L(!cpu_reset),
+      .ENA_4(clk),
+      .CLK(clk)
+      );
 
 
   // ------------------------------------------------------------------------------------
