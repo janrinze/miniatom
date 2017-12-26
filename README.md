@@ -22,8 +22,8 @@ requirements:
 	- GNU make
 	- icotools for programming ICOboard
 	- ICOboard with 1MB SRAM (128K should work too, untested)
-  - SDcard connection
-  - VGA connection
+	- SDcard connection
+	- VGA connection
 
 Memory map of this ATOM:
 
