@@ -13,7 +13,7 @@ status:
 	- CPU runs at 32.5 MHz and the prompt is visible
 	- fully functional keyboard.
 	- BASIC,FP and P-Charme working.
-  - SDcard access over SPI and SDDOS rom.
+	- SDcard access over SPI and SDDOS rom.
 
 requirements:
 
