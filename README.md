@@ -1,5 +1,5 @@
 # miniatom
-Acorn Atom in minimal cofiguration for iCE40 HX8K ICOboard
+Acorn Atom in minimal configuration for iCE40 HX8K ICOboard
 
 The Acorn Atom is a 1980's home computer. It requires very little resources.
 It makes a very good candidate for a minimal implementation on the ICOboard.
