@@ -24,55 +24,31 @@
 `include "Arlet6502/ALU.v"
 `include "Arlet6502/cpu.v"
 `include "spi/spi.v"
+`include "flashmem/icosoc_flashmem.v"
 
 /*  TODO:
 
     - implement new 6502
 
-          Memory map of my old ATOM
+          Memory map of this ATOM
 
           FFFF   Top of memory
 
 
-          F000   ROM     MM52164    IC20        - onboard MOS
-
-          E000   Reserved -Disk Operating System
-
-
-          D000   ROM     MM52132    IC21		- onboard FPROM
-
-
-          C000   ROM     MM52164    IC20        - onboard BASIC
-
-          BC00   Empty
-          B800   VIA     6522	    IC1         - timer ?
+          F000   ROM     MM52164    IC20  - onboard MOS
+          E000   ROM                      - onboard SDDOS
+          D000   ROM     MM52132    IC21	- onboard FPROM
+          C000   ROM     MM52164    IC20  - onboard BASIC
+          BC00   extension                - VGA colour table.
+          B800   VIA     6522	    IC1     - onboard VIA 6522
           B400   Extension	        PL8
-          B000   PPI     INS8255    IC25	    - keyboard
-
-
-          A000   ROM     MN52132    IC24		- onboard P-Charme
-
-          9800   Empty
-          9400   RAM     2114       ICs 32&33   - onboard
-          9000   RAM     2114       ICs 34&35   - onboard
-          8C0O   RAM     2114       ICs 36&37   - onboard
-          8800   RAM     2114       ICs 38&39   - onboard
-          8400   RAM     2114       ICs 40&41   - onboard
-          8000   RAM     2114       ICs 42&43   - onboard
-
-          3C00   For RAM expansion off board
-          3800   RAM     2114       ICs 18&19   X
-          3400   RAM     2114       ICs 16&17   X
-          3000   RAM     2114       ICs 14&15   X
-          2C00   RAM     2114       ICs 12&13   X
-          2800   RAM     2114       ICs 10&11   X
-
-          0400   Reserved for Eurocards
-          0000   RAM     2114       ICs 51&52   - onboard
+          B000   PPI     INS8255    IC25	- keyboard
+          A000   ROM     MN52132    IC24	- onboard P-Charme
+          0-9FFF                          - onboard RAM
 
   General Idea:
 
-    1024x768 screen to have ATOM screen with 4x4 pixel size.
+    1024x768 ATOM screen with 4x4 pixel size.
 
     General timing
 
@@ -141,8 +117,12 @@ module top (
   input  miso,
   output mosi,
   output ss,
-  output sclk
+  output sclk,
 
+  output SPI_FLASH_CS,
+  output SPI_FLASH_SCLK ,
+  output SPI_FLASH_MOSI ,
+  input SPI_FLASH_MISO
   
 );
 
@@ -192,20 +172,20 @@ module top (
 /* 65 MHz	*/
     SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
                   .PLLOUT_SELECT("GENCLK"),
-                       
-            /*          // 120 MHz
+                 /*         
+                    // 120 MHz
                   .DIVR(4'b0100),		// DIVR =  4
                   .DIVF(7'b0101111),	// DIVF = 47
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-              */
-                
+           
+                 */
                   // 130 Mhz
                   .DIVR(4'b0100),		// DIVR =  4
                   .DIVF(7'b0110011),	// DIVF = 51
                   .DIVQ(3'b011),		// DIVQ =  3
                   .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-               
+                
  /*
     // 150 MHz
 		.FEEDBACK_PATH("SIMPLE"),
@@ -468,64 +448,100 @@ module top (
 
 
   // ------------------------------------------------------------------------------------
-  // MOS ROM, BASIC ROM and minimal RAM
-	// ------------------------------------------------------------------------------------
-
-
-    reg [7:0] kernel_rom[0:4095];
-    reg [7:0] basic_rom[0:4095];
-    //reg [7:0] pcharme_rom[0:4095];
-    reg [7:0] fp_rom[0:4095];
-    reg [7:0] sddos_rom[0:4095];
-
-    //initial $readmemh("roms/kernel.hex"		,kernel_rom);
-    initial $readmemh("roms/akernel_patched.hex"		,kernel_rom);
-    initial $readmemh("roms/basic.hex"		,basic_rom);
-    
-    initial $readmemh("roms/sddos.hex"	,sddos_rom);
-    //initial $readmemh("roms/pcharme.hex"	,pcharme_rom);
-    initial $readmemh("roms/floatingpoint.hex",fp_rom);
-    
-    wire [16:0] romaddr;
-    wire [7:0] kernel_dat;
-    wire [7:0] basic_dat;
-    //wire [7:0] pcharme_dat;
-    wire [7:0] fp_dat;
-    wire [7:0] sddos_dat;
-    
-    
-    assign kernel_dat  = (romaddr[15:12]==4'hF) ? kernel_rom[romaddr[11:0]]  : 8'h00;
-    assign basic_dat   = (romaddr[15:12]==4'hC) ? basic_rom[romaddr[11:0]]   : 8'h00;
-    //assign pcharme_dat = (romaddr[15:12]==4'hA) ? pcharme_rom[romaddr[11:0]] : 8'h00;
-    assign fp_dat      = (romaddr[15:12]==4'hD) ? fp_rom[romaddr[11:0]]      : 8'h00;
-    assign sddos_dat   = (romaddr[15:12]==4'hE) ? sddos_rom[romaddr[11:0]]   : 8'h00;
-    
-    
-    wire [7:0] boot_data;
-        
-    //assign boot_data = kernel_dat | basic_dat | pcharme_dat | fp_dat;   
-    assign boot_data = kernel_dat | basic_dat | sddos_dat | fp_dat;   
-
-  // ------------------------------------------------------------------------------------
   // Bootloader
 	// ------------------------------------------------------------------------------------
+  
+  wire [31:0] flash_data;
+  reg [23:0] flash_addr;
+  reg flash_valid;
+  wire flash_ready;
+  
+  reg [31:0]  flash_copy;
+  
+  icosoc_flashmem flasmem( 
+  .clk(clk),
+  .resetn( pll_locked),
+
+	.valid( flash_valid),
+	.ready( flash_ready),
+	.addr( flash_addr),
+	.rdata( flash_data),
+  .spi_cs( SPI_FLASH_CS),
+  .spi_sclk(SPI_FLASH_SCLK ),
+  .spi_mosi(SPI_FLASH_MOSI ),
+  .spi_miso(SPI_FLASH_MISO)
+   );
+    //reg [16:0] dma_addr;
     reg [16:0] dma_addr;
+    
+    reg [2:0] bl_state;
     wire [16:0] next_dma_addr = dma_addr + 1;
+    wire [23:0] next_flash_addr = flash_addr + 4;
+    reg [7:0] boot_data;
     
-    assign romaddr = dma_addr;
-    
+  
+// Bootloader statemachine.  
+`define BL_IDLE 0
+`define BL_SETUP 1
+`define BL_WAITFLASH 2
+`define BL_WRITE1 3
+`define BL_WRITE2 4
+`define BL_WRITE3 5
+`define BL_WRITE4 6
+`define BL_DONE 7
     
     always@(posedge clk) begin
-      if (reboot_req)
-        begin
-          dma_addr <= 17'hC000;
-          boot <= 1;
-        end
-      else
-        if (dma_addr[16])
-          boot <= 0;
-        else
-          dma_addr <= next_dma_addr;
+      if (~pll_locked) begin
+        boot <= 0;
+        flash_valid <=0;
+        bl_state <= `BL_SETUP;
+        flash_addr <= 24'h40000;
+        boot_data <= 8'h00;
+      end
+      else 
+        case (bl_state)
+        `BL_IDLE:       begin
+                          boot <= 0;
+                          flash_valid <=0;
+                          bl_state <= reboot_req ? `BL_SETUP : `BL_IDLE;
+                        end
+        `BL_SETUP:      begin
+                          flash_addr <= 24'h40000;
+                          dma_addr <= 17'h8000;
+                          flash_valid <=1;
+                          boot<=1;
+                          bl_state <= `BL_WAITFLASH;
+                        end
+        `BL_WAITFLASH:  if (flash_ready) begin
+                           flash_copy <= flash_data;
+                           flash_addr <= next_flash_addr;
+                           bl_state <= `BL_WRITE1;
+                        end
+        `BL_WRITE1:     begin
+                          boot_we<=1;
+                          boot_data <= flash_copy[7:0];
+                          bl_state <= `BL_WRITE2;
+                        end
+        `BL_WRITE2:     begin
+                          dma_addr <= next_dma_addr;
+                          boot_data <= flash_copy[15:8];
+                          bl_state <= `BL_WRITE3;
+                        end
+        `BL_WRITE3:     begin
+                          dma_addr <= next_dma_addr;
+                          boot_data <= flash_copy[23:16];
+                          bl_state <= `BL_WRITE4;
+                        end
+        `BL_WRITE4:     begin
+                          dma_addr <= next_dma_addr;
+                          boot_data <= flash_copy[31:24];
+                          bl_state <= `BL_DONE;
+                        end
+        `BL_DONE:       begin
+                          dma_addr <= next_dma_addr;
+                          bl_state <= next_dma_addr[16] ? `BL_IDLE : `BL_WAITFLASH;
+                        end
+        endcase
     end
     
   // ------------------------------------------------------------------------------------
@@ -535,7 +551,7 @@ module top (
 	
 	vga display(
 		.clk( vidclk ),
-		.reset(reboot_req),
+		.reset(kbd_reset | ~pll_locked),
 		.address(vdu_address),
 		.data(vid_data),
 		.settings(graphics_mode),
@@ -561,13 +577,13 @@ module top (
 	// vdu_address and cpu_addres are both latched on clk so this should be fine.
 	// ------------------------------------------------------------------------------------
 
-    reg [1:0] sram_state;
-    wire sram_wrlb, sram_wrub;
-    wire [18:0] sram_addr;
-    wire [15:0] sram_dout;
-    wire [15:0] sram_din;
+  reg [1:0] sram_state;
+  wire sram_wrlb, sram_wrub;
+  wire [18:0] sram_addr;
+  wire [15:0] sram_dout;
+  wire [15:0] sram_din;
 
-    SB_IO #(
+  SB_IO #(
         .PIN_TYPE(6'b 1010_01),
         .PULLUP(1'b 0)
     ) sram_io [15:0] (
@@ -577,52 +593,33 @@ module top (
         .D_IN_0(sram_din)
     );
 
-	// redirect ROM write.
-	// Perhaps in future we want to enable dynamic roms
-	wire romwrite = W_en & cpu_address[15] & cpu_address[14];//|cpu_address[13]) ;
+  // redirect ROM write.
+  // Perhaps in future we want to enable dynamic roms
+  wire romwrite = W_en & cpu_address[15] & cpu_address[14];//|cpu_address[13]) ;
 
-    assign SRAM_A = vga_req ? { 6'b000100, vdu_address[12:0] } :boot ? {2'b00,dma_addr } :{ romwrite,2'b00,cpu_address};
+  assign SRAM_A = vga_req ? { 6'b000100, vdu_address[12:0] } :boot ? {2'b00,dma_addr } :{ romwrite,2'b00,cpu_address};
+  assign SRAM_nCE = 0;
+  assign SRAM_nWE =  wg  ;
+  assign SRAM_nOE = (phi2_we);
+  assign SRAM_nLB = 0;
+  assign SRAM_nUB = 0;
+  assign sram_dout = { 8'd0, boot ? boot_data : D_out};
+   
+  always@(posedge vidclk) begin
+    if (vga_req) vid_data <=sram_din[7:0];
+  end
+   
+  // --------- data bus latch ---------
+  always@(posedge clk) begin
+    if (IO_select)
+      D_in <= IO_out;
+    else
+      D_in <= sram_din[7:0];
+  end
 
-
-    assign SRAM_nCE = 0;
-    assign SRAM_nWE =  wg  ;
-    assign SRAM_nOE = (phi2_we);
-    assign SRAM_nLB = 0;//(phi2_we) ? wg : 0;
-    assign SRAM_nUB = 0;//(phi2_we) ? wg : 0;
-    assign sram_dout = { 8'd0, boot ? boot_data : D_out};
-
-	
-    reg [7:0] latch_SRAM_out;
-
-    reg [7:0] tDin;
-
-/*
-    // --------- phi2  video data -----------    
-    always@(negedge vidclk) begin
-      if (vga_req) t_vid_data <= sram_din[7:0];
-		end*/
-    
-    always@(posedge vidclk) begin
-      if (vga_req) vid_data <=sram_din[7:0];
-    end
-    
-/*       
-    assign D_in = IO_select? PIO_out:sram_din[7:0];
-*/    
-    // --------- data bus latch ---------
-    always@(posedge clk) begin
-      if (IO_select)
-        D_in <= IO_out;
-      else
-        D_in <= sram_din[7:0];
-    end
-
-    // shiftlock led  
-    reg lock;
-    always@(posedge wg) if (cpu_address == 16'h00E7) lock <= D_out[5];
-    
-    assign led1 = lock;
-    
-
+  // shiftlock led  
+  reg lock;
+  always@(posedge wg) if (cpu_address == 16'h00E7) lock <= D_out[5];
+  assign led1 = lock;
 
 endmodule

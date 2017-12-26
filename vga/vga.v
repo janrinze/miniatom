@@ -119,11 +119,11 @@ wire vert_valid   = (vert_counter[9:8]==3) ? 0 : 1;
 // 60 Hz 
 wire hor_restart  = hor_counter == 511+12+68+80;
 wire hs_start     = hor_counter == 511+12;
-wire hs_stop	  = hor_counter == 511+12+68;
+wire hs_stop	    = hor_counter == 511+12+68;
 
 wire vert_restart = vert_counter == 767+3+6+29;
 wire vs_start     = vert_counter == 767+3;
-wire vs_stop	  = vert_counter == 767+3+6;
+wire vs_stop	    = vert_counter == 767+3+6;
 
 /* 75 Hz
 wire hor_restart  = hor_counter == 511+8+48+88;
@@ -139,7 +139,7 @@ reg invert;
 wire c_restart    = char_line==4'b1011;
 wire next_byte    = hor_counter[3:0] == 4'b0000;
 wire next_line    = vert_counter[1:0] == 2'b11;
-
+wire next_data    = (hor_counter[3:0]==4'b1111);
 reg h_sync,v_sync,bg,invs;
 reg [5:0] pixel;
 
@@ -151,6 +151,7 @@ wire highres;
 
 duplic txt [7:0] (textchar,Dtextchar);
 duplic dta [7:0] (data,Ddata);
+//duplic dta [7:0] (data,Ddata);
 assign highres = (settings==4'hf)|(settings==4'h0);
 
 charGen charmap (
@@ -195,12 +196,19 @@ always@(posedge clk) begin
 	end else begin
 		if (hor_restart) begin
 		    hor_counter <= 0;
-		    if (vert_restart) 
+        // multi pix here
+		    if (vert_restart) begin
 		        vert_counter <= 0;
-		    else
-			vert_counter <= vert_counter + 1;
+            // multiline here
+          end
+		    else 
+          begin
+            vert_counter <= vert_counter + 1;
+            // multiline here
+          end
 		end else begin
 		    hor_counter <= hor_counter + 1;
+        // multi pix here
 		end	
 		
 		
@@ -223,7 +231,7 @@ always@(posedge clk) begin
 				char_line <= char_line +1;
 		end
 
-	    if (hor_counter[3:0]==4'b1111) 
+	    if (next_data)
         case ({data[7:6],settings})
           6'b00_0000 : curpixeldat <= Dtextchar; // text mode
 	        6'b10_0000 : curpixeldat <= ~Dtextchar; // text mode
