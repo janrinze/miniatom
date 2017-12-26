@@ -2,7 +2,7 @@
 Acorn Atom in minimal cofiguration for iCE40 HX8K ICOboard
 
 The Acorn Atom is a 1980's home computer. It requires very little resources.
-It makes a very good candidate for a minimal implementation on the HX8K.
+It makes a very good candidate for a minimal implementation on the ICOboard.
 
 --- Work in Progress ---
 
@@ -13,51 +13,45 @@ status:
 	- CPU runs at 32.5 MHz and the prompt is visible
 	- fully functional keyboard.
 	- BASIC,FP and P-Charme working.
+  - SDcard access over SPI and SDDOS rom.
 
 requirements:
 
-	- IceStorm tools for verilog compilation and HX8K programming
-	- Arlet's 6502 in directory ../verilog-6502
+	- IceStorm tools for verilog compilation.
+	- Arlet's 6502 in directory  available in Arlet6502
 	- GNU make
 	- icotools for programming ICOboard
 	- ICOboard with 1MB SRAM (128K should work too, untested)
+  - SDcard connection
+  - VGA connection
 
-Memory map:
+Memory map of this ATOM:
 
-	Fxxx   ROM     MM52164    IC20        - onboard MOS
-
-	Exxx   Reserved -Disk Operating System
-
-	Dxxx   ROM     MM52132    IC21        - onboard FP-ROM
-
-	C000   ROM     MM52164    IC20        - onboard BASIC
-
-	BC00   VGA LUT						  - BC00 : Background color
-											BC01 : Foreground color
-	
-	B800   VIA     6522       IC1         - timer ? N.A.
-	B400   Extension          PL8
-	B000   PPI     INS8255    IC25        - keyboard
-
-	A000   ROM     MN52132    IC24        - onboard P-Charme
-
+	F000   ROM     MM52164    IC20  - onboard MOS
+	E000   ROM                      - onboard SDDOS
+	D000   ROM     MM52132    IC21	- onboard FPROM
+	C000   ROM     MM52164    IC20  - onboard BASIC
+	BC00   extension                - VGA colour table.
+	B800   VIA     6522	    IC1     - onboard VIA 6522
+	B400   Extension	        PL8
+	B000   PPI     INS8255    IC25	- keyboard
+	A000   ROM     MN52132    IC24	- onboard P-Charme
 	9xxx   Video RAM                      - external SRAM
 	8xxx   Video RAM                      - external SRAM
-
 	0000 - 7FFF    RAM                    - external SRAM
 
 VGA output:
 
-	hsync B4
-	vsync B5
+	hsync N6
+	vsync N7
 
 	# RGB 2:2:2
-	rgb[0] B3 (blue  lsb)
-	rgb[1] C3 (blue  msb)
-	rgb[2] B7 (green lsb)
-	rgb[3] A5 (green msb)
-	rgb[4] B6 (red   lsb)
-	rgb[5] A2 (red   msb)
+	rgb[0] M8 (blue  lsb)
+	rgb[1] L7 (blue  msb)
+	rgb[2] N9 (green lsb)
+	rgb[3] L9 (green msb)
+	rgb[4] P9 (red   lsb)
+	rgb[5] G5 (red   msb)
 	
 	Current RGB 2:2:2 to VGA connector
 	msb connects to vga connector with 390 ohm
@@ -88,6 +82,12 @@ Keyboard connection:
 	set_io key_row[8]       F14
 	set_io key_row[9]       T16
 
+SD Card connection:
+
+	set_io ss       T15
+	set_io mosi     T14
+	set_io sclk     T11
+	set_io miso     R10
 		
 It still needs more attention to get it fully compatible.
 Next up will be timers and more screen modes.
