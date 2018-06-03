@@ -23,7 +23,7 @@ requirements:
 	- icotools for programming ICOboard
 	- ICOboard with 1MB SRAM (128K should work too, untested)
 	- SDcard connection
-	- VGA connection
+	- VGA connection PMOD-VGA.
 
 Memory map of this ATOM:
 
@@ -31,33 +31,34 @@ Memory map of this ATOM:
 	E000   ROM                      - onboard SDDOS
 	D000   ROM     MM52132    IC21	- onboard FPROM
 	C000   ROM     MM52164    IC20  - onboard BASIC
-	BC00   extension                - VGA colour table.
-	B800   VIA     6522	    IC1     - onboard VIA 6522
-	B400   Extension	        PL8
+	BD00   IO      Extension        - VGA colour table.
+	B800   VIA     6522       IC1   - onboard VIA 6522
+	B400   IO      Extension        - PL8
 	B000   PPI     INS8255    IC25	- keyboard
 	A000   ROM     MN52132    IC24	- onboard P-Charme
-	9xxx   Video RAM                      - external SRAM
-	8xxx   Video RAM                      - external SRAM
-	0000 - 7FFF    RAM                    - external SRAM
+	9xxx   Video   RAM              - external SRAM
+	8xxx   Video   RAM              - external SRAM
+	0000 - 7FFF    RAM              - external SRAM
 
 VGA output:
 
-	hsync N6
-	vsync N7
-
-	# RGB 2:2:2
-	rgb[0] M8 (blue  lsb)
-	rgb[1] L7 (blue  msb)
-	rgb[2] N9 (green lsb)
-	rgb[3] L9 (green msb)
-	rgb[4] P9 (red   lsb)
-	rgb[5] G5 (red   msb)
+# PMOD VGA (diligent)
+# connects to two PMOD connectors.
+ hsync B8
+ vsync A9
+ red[0] A5
+ red[1] A2
+ red[2] C3
+ red[3] B4
+ blue[0] B7
+ blue[1] B6
+ blue[2] B3
+ blue[3] B5
+ green[0] D8
+ green[1] B9
+ green[2] B10
+ green[3] B11
 	
-	Current RGB 2:2:2 to VGA connector
-	msb connects to vga connector with 390 ohm
-	lsb connects to vga connector with 820 ohm.
-	hsync and vsync connected with 120 ohm.
-
 Keyboard connection:
 
 	set_io key_col[0]       F11
