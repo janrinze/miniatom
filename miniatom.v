@@ -92,10 +92,12 @@ module top (
 	// global clock
 	input  pclk,
 	
-	// vga RGB 2:2:2 output
-	output hsync,
-	output vsync,
-	output [5:0] rgb,
+    // vga RGB 4:4:4 output
+    output hsync,
+    output vsync,
+    output reg [3:0] red,
+    output reg [3:0] green,
+    output reg [3:0] blue,
 	
 	// interface to ATOM keyboard
 	input shift_key,
@@ -287,7 +289,7 @@ module top (
 	assign Extension_select = (cpu_address[11:10]==2'h1) ? IO_select : 0 ; // #B400 - #B7FF is Extension port
 	assign VIA_select       = (cpu_address[11:10]==2'h2) ? IO_select : 0 ; // #B800 - #BBFF is VIA
 	assign ROMBank_select   = (cpu_address[11:8]==4'hF) ? IO_select : 0 ; // #BF00 - #BFFF is ROMBank_select
-	assign VGAIO_select     = (cpu_address[11:8]==4'hD) ? 0 : 0 ; // #BD00 - #BDFF is VGAIO
+	assign VGAIO_select     = (cpu_address[11:8]==4'hD) ? IO_select : 0 ; // #BD00 - #BDFF is VGAIO
   assign SDcard_select    = (cpu_address[15: 4] == 12'hbc0);            // #BC00 - #BC0F is SDcard SPI
   
 	assign IO_wr = ~wg;
@@ -558,16 +560,18 @@ module top (
 		.rgb(vga_rgb),
 		.hsync(vga_hsync_out),
 		.vsync(vga_vsync_out),
-    .req(vga_req),
-    .cs(VGAIO_select),
-    .we(wg),
-    .cpu_address(cpu_address[3:0]),
-    .Din(D_out)
+	    .req(vga_req),
+	    .cs(VGAIO_select),
+	    .we(wg),
+	    .cpu_address(cpu_address[3:0]),
+	    .Din(D_out)
 		);
 		
     
 	always@(posedge vidclk) begin
-		rgb   <= vga_rgb;
+		red  <= {vga_rgb[5:4],vga_rgb[5:4]};
+		green  <= {vga_rgb[3:2],vga_rgb[3:2]};
+		blue  <= {vga_rgb[1:0],vga_rgb[1:0]};
 		vsync <= vga_vsync_out;
 		hsync <= vga_hsync_out;
 		end

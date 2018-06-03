@@ -4,9 +4,10 @@ BOARD = icoboard
 PIN_DEF = $(PROJ)_$(BOARD).pcf
 END_SPEED = 33
 FOOTPRINT = ct256
-SEED=3775152925
-# 2416205610 502071218 3488400551 (36.66MHz)
-# -retime -abc2 1031308875
+SEED=2458678799
+# 2458678799 // Timing estimate: 26.54 ns (37.68 MHz)
+# -retime -abc2 1031308875 1086239526
+
 
 all: $(PROJ).rpt $(PROJ).bin
 
@@ -15,7 +16,7 @@ all: $(PROJ).rpt $(PROJ).bin
 	grep arning YOSYS.LOG
 
 %.asc: $(PIN_DEF) %.blif
-	arachne-pnr -s 1086239526 -d $(subst hx,,$(subst lp,,$(DEVICE))) -P $(FOOTPRINT) -o $@ -p $^ > ARACHNE.LOG
+	arachne-pnr -s $(SEED) -d $(subst hx,,$(subst lp,,$(DEVICE))) -P $(FOOTPRINT) -o $@ -p $^ > ARACHNE.LOG
 	cat ARACHNE.LOG
 
 %.bin: %.asc

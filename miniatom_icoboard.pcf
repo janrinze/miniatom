@@ -21,16 +21,34 @@ set_io pclk R9
 #set_io rgb[4] B6
 #set_io rgb[5] A2
 
-set_io hsync N6
-set_io vsync N7
+#set_io hsync N6
+#set_io vsync N7
 
 # RGB 2:2:2
-set_io rgb[0] M8
-set_io rgb[1] L7
-set_io rgb[2] N9
-set_io rgb[3] L9
-set_io rgb[4] P9
-set_io rgb[5] G5
+#set_io rgb[0] M8
+#set_io rgb[1] L7
+#set_io rgb[2] N9
+#set_io rgb[3] L9
+#set_io rgb[4] P9
+#set_io rgb[5] G5
+
+
+# PMOD vga
+set_io --warn-no-port hsync B8
+set_io --warn-no-port vsync A9
+set_io --warn-no-port red[0] A5
+set_io --warn-no-port red[1] A2
+set_io --warn-no-port red[2] C3
+set_io --warn-no-port red[3] B4
+set_io --warn-no-port blue[0] B7
+set_io --warn-no-port blue[1] B6
+set_io --warn-no-port blue[2] B3
+set_io --warn-no-port blue[3] B5
+set_io --warn-no-port green[0] D8
+set_io --warn-no-port green[1] B9
+set_io --warn-no-port green[2] B10
+set_io --warn-no-port green[3] B11
+
 
 set_io key_col[0] 	F11
 set_io key_col[1]	E14
