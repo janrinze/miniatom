@@ -63,7 +63,7 @@ module spi
           begin             
              if (state == `spi_init)
                begin
-                  if (count == 22591) // 2 * 88 * 128 + 63
+                  if (count == 22656) // 177*128 // 2 * 88 * 128 + 63
                     begin
                        state <= `spi_s0;
                        sclk  <= 1'b0;
@@ -71,7 +71,7 @@ module spi
                     end
                   else
                     begin
-                       sclk  <= count[6]; // 250 KHz
+                       sclk  <= count[7]; // 250 KHz
                        count <= count + 1;
                     end
                end

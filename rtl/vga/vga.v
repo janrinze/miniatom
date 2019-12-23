@@ -43,18 +43,19 @@
 
 */
 
-`include "vga/charGen.v"
+`include "charGen.v"
 
 module duplic(
-  input in,
-  output [1:0] out
-  );
-  assign out={in,in};
+		input in,
+		output [1:0] out
+	);
+	assign out={in,in};
 endmodule
 
 
 module 	vga (
 		input clk,
+		input cpu_clk,
 		input reset,
 		input [7:0] data,
 		input [3:0] settings,
@@ -85,16 +86,16 @@ module 	vga (
 	reg [5:0] color2;
 	reg [5:0] color3;
   
- always@(posedge we or posedge reset) begin
+ always@(posedge cpu_clk) begin
   if (reset) begin
-    color0 <= 6'b000011; 
-    color1 <= 6'b001001;
-    color2 <= 6'b110000;
-    color3 <= 6'b111111;
+    color0 <= 6'b000000; 
+    color1 <= 6'b000100;
+    color2 <= 6'b001000;
+    color3 <= 6'b001100;
     end 
   else
     begin  // latch writes to color regs
-      if (cs) begin
+      if (cs&we) begin
         case (cpu_address[1:0])
           2'b00: color0 <= Din[5:0];
           2'b01: color1 <= Din[5:0];
@@ -114,16 +115,22 @@ reg [4:0] hor_pos;
 reg [7:0] vert_pos;
 reg [3:0] tvert_pos;
 
-wire hor_valid    = ~hor_counter[9];
+wire hor_valid    = ~hor_counter[8];
 wire vert_valid   = (vert_counter[9:8]==3) ? 0 : 1;
 // 60 Hz 
-wire hor_restart  = hor_counter == 511+12+68+80;
-wire hs_start     = hor_counter == 511+12;
-wire hs_stop	    = hor_counter == 511+12+68;
+ wire hor_restart  = hor_counter == ((512+12+68+80)/2)-1;
+ wire hs_start     = hor_counter == ((512+10)/2)-1;
+ wire hs_stop	  = hor_counter == ((512+12+68)/2)-1;
+
+//wire hor_restart  = hor_counter == 338;
+//wire hs_start     = hor_counter == 261;
+//wire hs_stop	  = hor_counter == 297;
+
+
 
 wire vert_restart = vert_counter == 767+3+6+29;
 wire vs_start     = vert_counter == 767+3;
-wire vs_stop	    = vert_counter == 767+3+6;
+wire vs_stop	  = vert_counter == 767+3+6;
 
 /* 75 Hz
 wire hor_restart  = hor_counter == 511+8+48+88;
@@ -137,9 +144,9 @@ wire vs_stop      = vert_counter == 767+1+3;
 wire textmode	  = settings[3]==1'b0;
 reg invert;	      
 wire c_restart    = char_line==4'b1011;
-wire next_byte    = hor_counter[3:0] == 4'b0000;
+wire next_byte    = hor_counter[2:0] == 3'b000;
 wire next_line    = vert_counter[1:0] == 2'b11;
-wire next_data    = (hor_counter[3:0]==4'b1111);
+wire next_data    = (hor_counter[2:0]==3'b111);
 reg h_sync,v_sync,bg,invs;
 reg [5:0] pixel;
 
@@ -148,16 +155,18 @@ wire [15:0] Dtextchar;
 reg [15:0] Dgraph;
 wire [15:0] Ddata;
 wire highres;
+wire half_height;
 
 duplic txt [7:0] (textchar,Dtextchar);
 duplic dta [7:0] (data,Ddata);
 //duplic dta [7:0] (data,Ddata);
 assign highres = (settings==4'hf)|(settings==4'h0);
-
+assign half_height = (settings[3:1]==3'h4)|(settings[3:1]==3'h3);
 charGen charmap (
 	.address({data[5:0],char_line}),
 	.dout(textchar)
 );
+
 
 // special mode using blocks
 wire [1:0] p1,p2,p3,p4,p5,p6;
@@ -171,14 +180,14 @@ assign p6 = {data[0]&~data[7],data[0]};
 
 
 always @* begin
-  case (char_line[3:2])
-  0 : Dgraph = {{4{p1}},{4{p2}}};
-  1 : Dgraph = {{4{p3}},{4{p4}}};
-  default : Dgraph = {{4{p5}},{4{p6}}};
-  endcase
+	case (char_line[3:2])
+		0 : Dgraph = {{4{p1}},{4{p2}}};
+		1 : Dgraph = {{4{p3}},{4{p4}}};
+		default : Dgraph = {{4{p5}},{4{p6}}};
+	endcase
 end
   
-wire req = (hor_counter[3:0]==4'b1100);
+wire req = (hor_counter[2:0]==4'b110);
 
 always@(posedge clk) begin
 	if (reset) begin
@@ -192,23 +201,22 @@ always@(posedge clk) begin
 		hor_pos<=0;
 		vert_pos<=0;
 		tvert_pos<=0;
-    invert <=0;
-	end else begin
+		invert <=0;
+	end 
+	else 
+	begin
 		if (hor_restart) begin
 		    hor_counter <= 0;
-        // multi pix here
-		    if (vert_restart) begin
+		    if (vert_restart)
+		      begin
 		        vert_counter <= 0;
-            // multiline here
-          end
-		    else 
-          begin
-            vert_counter <= vert_counter + 1;
-            // multiline here
-          end
+	          end
+			    else 
+	          begin
+	            vert_counter <= vert_counter + 1;
+	          end
 		end else begin
 		    hor_counter <= hor_counter + 1;
-        // multi pix here
 		end	
 		
 		
@@ -232,28 +240,27 @@ always@(posedge clk) begin
 		end
 
 	    if (next_data)
-        case ({data[7:6],settings})
-          6'b00_0000 : curpixeldat <= Dtextchar; // text mode
-	        6'b10_0000 : curpixeldat <= ~Dtextchar; // text mode
-          6'b01_0000 : curpixeldat <= Dgraph; // text mode blocks
-          6'b11_0000 : curpixeldat <= Dgraph; // text mode blocks
-	        default:  curpixeldat <= highres ?Ddata:{data,8'h00};
-	      endcase
+	        case ({data[7:6],settings})
+				6'b00_0000 : curpixeldat <= Dtextchar; // text mode
+				6'b10_0000 : curpixeldat <= ~Dtextchar; // text mode
+				6'b01_0000 : curpixeldat <= Dgraph; // text mode blocks
+				6'b11_0000 : curpixeldat <= Dgraph; // text mode blocks
+				default:  curpixeldat <= highres ? Ddata : {data,8'h00};
+			endcase
 	    else 
-        if (highres) begin
-          if (hor_counter[0]==1'b1) 
-            curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left	
-        end
-        else
-          if (hor_counter[1:0]==2'b11)
-            curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left
-
-    case(curpixeldat[15:14])
-      0:  pixel <= color0;
-      1:  pixel <= color1;
-      2:  pixel <= color2;
-      3:  pixel <= color3;
-    endcase
+	        if (highres) begin
+	            curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left	
+	        end
+	        else
+	          if (hor_counter[0]==1'b1)
+	            curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left
+	
+	    case(curpixeldat[15:14])
+	      0:  pixel <= color0;
+	      1:  pixel <= color1;
+	      2:  pixel <= color2;
+	      3:  pixel <= color3;
+	    endcase
 
 		bg <= hor_valid & vert_valid; 
 		
@@ -271,7 +278,9 @@ always@(posedge clk) begin
 end
 
 
-assign address = (textmode) ? {4'b000,tvert_pos,hor_pos}:{ vert_pos,hor_pos};
+assign address = (textmode) ? {4'b000,tvert_pos,hor_pos}:(half_height ? {1'b0,vert_pos[7:1],hor_pos} : { vert_pos,hor_pos} );
+
+
 assign hsync = h_sync;
 assign vsync = v_sync;
 

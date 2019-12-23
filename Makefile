@@ -1,63 +1,56 @@
-PROJ = miniatom
+SHELL=/bin/bash
+PROJ = AcornAtom
+DEVICE = up5k
+FOOTPRINT = sg48
+#BOARD = upduino2
+#BOARD = 5kevb
+
+
 DEVICE = hx8k
-BOARD = icoboard
-PIN_DEF = $(PROJ)_$(BOARD).pcf
-END_SPEED = 33
+BOARD = miniatom_hx8k_sram
 FOOTPRINT = ct256
-SEED=2458678799
-# 2458678799 // Timing estimate: 26.54 ns (37.68 MHz)
-# -retime -abc2 1031308875 1086239526
+
+PIN_DEF = $(BOARD).pcf
+END_SPEED = 44
 
 
-all: $(PROJ).rpt $(PROJ).bin
 
-%.blif: %.v vga/vga.v 
-	yosys -p 'synth_ice40 -top top -blif $@' $< > YOSYS.LOG
-	grep arning YOSYS.LOG
+SEED = $(shell /bin/bash -c "echo $$RANDOM")
+#SEED =  7354
 
-%.asc: $(PIN_DEF) %.blif
-	arachne-pnr -s $(SEED) -d $(subst hx,,$(subst lp,,$(DEVICE))) -P $(FOOTPRINT) -o $@ -p $^ > ARACHNE.LOG
-	cat ARACHNE.LOG
+SEED =  30659
+
+all: $(PROJ).json $(PROJ).asc $(PROJ).bin
+
+%.json: rtl/atom.v
+	yosys -p 'synth_ice40  -top top -json $@' $< |grep arning
+
+%.asc: %.json
+	nextpnr-ice40 --seed $(SEED) --placer heap --pcf $(PIN_DEF) --json $< --asc $@ --$(DEVICE) --package $(FOOTPRINT) --freq $(END_SPEED)
+	#nextpnr-ice40 --seed $(SEED) --placer heap  --opt-timing --timing-allow-fail --pcf $(PIN_DEF) --json $< --asc $@ --$(DEVICE) --package $(FOOTPRINT) --freq $(END_SPEED)
+	echo "SEED = " $(SEED)
+	icetime -d $(DEVICE) -P $(FOOTPRINT) -tm $@
 
 %.bin: %.asc
-	icepack $< $@
+	icepack -s $< $@
 
 %.rpt: %.asc
-	icetime -d $(DEVICE) -tr $@ $<
+	icetime -d $(DEVICE) -P $(FOOTPRINT) -tm $<
 
 rewire:
 	rm -f $(PROJ).asc $(PROJ).rpt $(PROJ).bin
 	make
 
-appimage.bin:
-	echo "@8000" > appimage.hex
-	cat splashscreen.hex >> appimage.hex
-	echo "@a000" >> appimage.hex
-	cat roms/pcharme.hex >> appimage.hex
-	echo "@c000" >> appimage.hex
-	cat roms/basic.hex >> appimage.hex
-	echo "@d000" >> appimage.hex
-	cat roms/floatingpoint.hex >> appimage.hex
-	echo "@e000" >> appimage.hex
-	cat roms/sddos.hex >> appimage.hex
-	echo "@f000" >> appimage.hex
-	cat roms/akernel_patched.hex >> appimage.hex
-	./flashbin.py
-
-prog: $(PROJ).bin 
+prog: $(PROJ).bin
 	iceprog $<
-
-icoboard: $(PROJ).bin appimage.bin
-	icoprog -f < $(PROJ).bin
-	icoprog -O 4 -f < appimage.bin
-	icoprog -b
+	iceprog -o 256k appimage.bin
 
 sudo-prog: $(PROJ).bin
 	@echo 'Executing prog as root!!!'
 	sudo iceprog $<
 
 clean:
-	rm -f $(PROJ).blif $(PROJ).asc $(PROJ).rpt $(PROJ).bin appimage.bin
+	rm -f $(PROJ).asc $(PROJ).rpt $(PROJ).bin $(PROJ).json
 
 .SECONDARY:
 .PHONY: all prog clean

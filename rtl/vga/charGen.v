@@ -7,7 +7,7 @@
 
 module charGen (
 	input [9:0] address,
-	output [7:0]dout);
+	output reg [7:0]dout);
 always @ (address)
 begin
 case (address)

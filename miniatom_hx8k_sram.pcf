@@ -1,0 +1,79 @@
+set_io --warn-no-port LED[0] B5
+set_io --warn-no-port LED[1] B4
+set_io --warn-no-port LED[2] A2
+set_io --warn-no-port LED[3] A1
+set_io --warn-no-port LED[4] C5
+set_io --warn-no-port LED[5] C4
+set_io --warn-no-port LED[6] B3
+set_io --warn-no-port LED[7] C3
+set_io pclk J3
+
+#set_io reset N11
+#set_io TXD B12
+#set_io RXD B10
+
+# IO on extension board
+
+set_io SRAM_nCE M2
+set_io SRAM_nOE T16
+set_io SRAM_nWE K1
+set_io SRAM_A[0] R1
+set_io SRAM_A[1] P1
+set_io SRAM_A[2] P2
+set_io SRAM_A[3] N3
+set_io SRAM_A[4] N2
+set_io SRAM_A[5] J2
+set_io SRAM_A[6] J1
+set_io SRAM_A[7] H2
+set_io SRAM_A[8] G2
+set_io SRAM_A[9] H1
+set_io SRAM_A[10] P8
+set_io SRAM_A[11] R10
+set_io SRAM_A[12] T10
+set_io SRAM_A[13] P10
+set_io SRAM_A[14] T11
+set_io SRAM_A[15] T13
+set_io SRAM_A[16] T14
+set_io SRAM_A[17] N12
+set_io SRAM_A[18] P13
+set_io SRAM_D[0] M1
+set_io SRAM_D[1] L3
+set_io SRAM_D[2] L1
+set_io SRAM_D[3] K3
+set_io SRAM_D[4] M11
+set_io SRAM_D[5] N10
+set_io SRAM_D[6] R16
+set_io SRAM_D[7] T15
+
+# PMOD vga
+set_io --warn-no-port hsync D1
+set_io --warn-no-port vsync D2
+set_io --warn-no-port red[0] T7
+set_io --warn-no-port red[1] T8
+set_io --warn-no-port red[2] T6
+set_io --warn-no-port red[3] R6
+set_io --warn-no-port blue[0] F2
+set_io --warn-no-port blue[1] G1
+set_io --warn-no-port blue[2] E2
+set_io --warn-no-port blue[3] F1
+set_io --warn-no-port green[0] R3
+set_io --warn-no-port green[1] R4
+set_io --warn-no-port green[2] T3
+set_io --warn-no-port green[3] R2
+
+# SD Card
+set_io ss    B2
+set_io mosi  B1
+set_io sclk  T2
+set_io miso  T1
+
+set_io SPI_FLASH_CS   R12
+set_io SPI_FLASH_SCLK R11
+set_io SPI_FLASH_MOSI P12
+set_io SPI_FLASH_MISO P11
+
+set_io led1 T9
+set_io led2 P9
+
+set_io --pull-up=yes ps2_clk C2
+set_io --pull-up=yes ps2_data C1

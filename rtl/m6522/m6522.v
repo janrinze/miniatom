@@ -122,7 +122,7 @@ module m6522
    reg [7:0]       load_data;
 
    // timer 1
-   reg [15:0]      t1c = 16'hffff; // simulators may not catch up w/o init here...
+   reg [15:0]      t1c;// = 16'hffff; // simulators may not catch up w/o init here...
    reg             t1c_active;
    reg             t1c_done;
    reg             t1_w_reset_int;
@@ -132,12 +132,12 @@ module m6522
    reg             t1_int_enable = 1'b0;
    reg             t1_toggle;
    reg             t1_irq = 1'b0;
-   reg             t1_pb7 = 1'b1;
+   reg             t1_pb7;// = 1'b1;
    reg             t1_pb7_en_c;
    reg             t1_pb7_en_d;
 
    // timer 2
-   reg [15:0]      t2c = 16'hffff;  // simulators may not catch up w/o init here...
+   reg [15:0]      t2c;// = 16'hffff;  // simulators may not catch up w/o init here...
    reg             t2c_active;
    reg             t2c_done;
    reg             t2_pb6;
@@ -256,6 +256,7 @@ module m6522
          r_pcr   <= 8'h00;
          w_orb_hs <= 1'b0;
          w_ora_hs <= 1'b0;
+	 t1_pb7    <= 1'b1;
       end else begin
          if (ENA_4 == 1'b1) begin
             w_orb_hs <= 1'b0;

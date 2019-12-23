@@ -17,6 +17,7 @@
  * The data bus is implemented as separate read/write buses. Combine them
  * on the output pads if external memory is required.
  */
+`include "ALU.v"
 
 module cpu( clk, reset, AB, DI, DO, WE, IRQ, NMI, RDY );
 

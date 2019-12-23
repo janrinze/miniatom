@@ -1,5 +1,6 @@
 
 module PIA8255 (
+	input clk,
     input cs,
     input reset,
     input [1:0] address,
@@ -11,9 +12,6 @@ module PIA8255 (
     output [3:0] Port_C_low,
     input wire [3:0] Port_C_high
     );
-
-
-    
 
 	// ------------------------------------------------------------------------------------
 	// 	25.5 Input/Output Port Allocations
@@ -53,34 +51,33 @@ module PIA8255 (
   reg [3:0] Port_C_L;
   reg [7:0] PIAout_r;
 
-	always@(posedge we, posedge reset) begin
+  always@(posedge clk) begin
     if (reset) begin
        Port_A_r <= 8'h0;
        Port_C_L <= 4'h0;
       end
-    else
+    else 
       begin
         // latch writes to PIO
-        if (cs) begin
           case (address[1:0])
-            2'b00: Port_A_r <= Din;
-            2'b10: Port_C_L <= Din[3:0];
-            2'b11: if (!Din[7]) Port_C_L[Din[2:1]] <= Din[0];
+            2'b00: if (cs&we) Port_A_r <= Din;
+            2'b10: if (cs&we) Port_C_L <= Din[3:0];
+            2'b11: if (cs&we&!Din[7]) Port_C_L[Din[2:1]] <= Din[0];
+			2'b01: ;
           endcase
-        end
       end
   end
 
   always @(*) begin
-    Port_B_r <= Port_B;
+    Port_B_r = Port_B;
   end
   
   always @(*) begin 
     case(address[1:0])
-      2'b00: PIAout_r <= Port_A_r;
-      2'b01: PIAout_r <= Port_B_r;
-      2'b10: PIAout_r <= { Port_C_high ,Port_C_L};
-      default:  PIAout_r <= 0;
+      2'b00: PIAout_r = Port_A_r;
+      2'b01: PIAout_r = Port_B_r;
+      2'b10: PIAout_r = { Port_C_high ,Port_C_L};
+      default:  PIAout_r = 0;
     endcase
   end
   
