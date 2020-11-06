@@ -62,6 +62,7 @@ module 	vga (
 		output [5:0] rgb,
 		output hsync,
 		output vsync,
+		output bg,
     output req,
     // register access
     input cs,

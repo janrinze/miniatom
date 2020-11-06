@@ -1,33 +1,39 @@
 PROJ = miniatom
 DEVICE = hx8k
 BOARD = icoboard
-PIN_DEF = $(PROJ)_$(BOARD).pcf
+PIN_DEF = $(PROJ)_$(BOARD)_hdmi.pcf
 END_SPEED = 33
 FOOTPRINT = ct256
-SEED=2458678799
-# 2458678799 // Timing estimate: 26.54 ns (37.68 MHz)
-# -retime -abc2 1031308875 1086239526
-
 
 all: $(PROJ).rpt $(PROJ).bin
 
-%.blif: %.v vga/vga.v 
-	yosys -p 'synth_ice40 -top top -blif $@' $< > YOSYS.LOG
-	grep arning YOSYS.LOG
+%.json: %.v
+	yosys -p 'synth_ice40 -relut -abc2 -top top -json $@' $< |grep arning
+	#yosys -p 'synth_ice40 -abc2 -top main -json $@' $< |grep arning
 
-%.asc: $(PIN_DEF) %.blif
-	arachne-pnr -s $(SEED) -d $(subst hx,,$(subst lp,,$(DEVICE))) -P $(FOOTPRINT) -o $@ -p $^ > ARACHNE.LOG
-	cat ARACHNE.LOG
+%.asc: %.json
+	#nextpnr-ice40 -r --placer heap --timing-allow-fail --opt-timing --pcf $(PIN_DEF) --json $< --asc $@ --$(DEVICE) --package $(FOOTPRINT) --freq $(END_SPEED)
+	nextpnr-ice40 -r --placer heap --timing-allow-fail --pcf $(PIN_DEF) --json $< --asc $@ --$(DEVICE) --package $(FOOTPRINT) --freq $(END_SPEED) --opt-timing
 
 %.bin: %.asc
-	icepack $< $@
+	icepack -s $< $@
 
 %.rpt: %.asc
-	icetime -d $(DEVICE) -tr $@ $<
+	icetime -c $(END_SPEED) -d $(DEVICE) -P $(FOOTPRINT) -tm $<
 
 rewire:
 	rm -f $(PROJ).asc $(PROJ).rpt $(PROJ).bin
 	make
+
+prog: $(PROJ).bin
+	iceprog $<
+
+sudo-prog: $(PROJ).bin
+	@echo 'Executing prog as root!!!'
+	sudo iceprog $<
+
+clean:
+	rm -f $(PROJ).asc $(PROJ).rpt $(PROJ).bin $(PROJ).json
 
 appimage.bin:
 	echo "@8000" > appimage.hex
@@ -44,20 +50,10 @@ appimage.bin:
 	cat roms/akernel_patched.hex >> appimage.hex
 	./flashbin.py
 
-prog: $(PROJ).bin 
-	iceprog $<
-
 icoboard: $(PROJ).bin appimage.bin
 	icoprog -f < $(PROJ).bin
 	icoprog -O 4 -f < appimage.bin
 	icoprog -b
-
-sudo-prog: $(PROJ).bin
-	@echo 'Executing prog as root!!!'
-	sudo iceprog $<
-
-clean:
-	rm -f $(PROJ).blif $(PROJ).asc $(PROJ).rpt $(PROJ).bin appimage.bin
 
 .SECONDARY:
 .PHONY: all prog clean

@@ -93,11 +93,14 @@ module top (
 	input  pclk,
 	
     // vga RGB 4:4:4 output
-    output hsync,
-    output vsync,
+    output reg hsync,
+    output reg vsync,
+    
     output reg [3:0] red,
     output reg [3:0] green,
     output reg [3:0] blue,
+    output reg vgaclk,
+    output vgade,
 	
 	// interface to ATOM keyboard
 	input shift_key,
@@ -131,7 +134,7 @@ module top (
   // clock signals
   wire fclk;			// 100 MHz clock icoboard
   wire pll_locked;	// signal when pll has reached lock
-	reg reset=1;		// global reset register
+  reg reset=1;		// global reset register
 
   reg clk,vidclk,spiclk;			// 32.5 MHz derived system clock
 	reg boot;
@@ -139,6 +142,7 @@ module top (
   reg phi2_we;
   
   wire vga_req;
+
   
   // reset signals
   wire kbd_reset;
@@ -226,7 +230,8 @@ module top (
   reg vga_cycle;
 	always@(posedge fclk) begin
     spiclk <= ~nxtcnt[0];
-		vidclk <= ~nxtcnt[1];
+    vgaclk <= ~nxtcnt[0];
+	vidclk <= ~nxtcnt[1];
     clk <= ~nxtcnt[1] | vga_req ;
     vga_cycle <= vga_req;
     // write gate and write cycle
@@ -246,7 +251,7 @@ module top (
   assign nxtcnt = cnt +1;
 	always@(posedge fclk) begin
     spiclk <= ~nxtcnt[2];
-		vidclk <= ~nxtcnt[1];
+	vidclk <= ~nxtcnt[1];
     clk <= ~nxtcnt[4] ;
     // write gate and write cycle
     wg  <= (nxtcnt!=5'b11111)|~(W_en | boot) ;
@@ -560,6 +565,7 @@ module top (
 		.rgb(vga_rgb),
 		.hsync(vga_hsync_out),
 		.vsync(vga_vsync_out),
+		.bg(vgade),
 	    .req(vga_req),
 	    .cs(VGAIO_select),
 	    .we(wg),
@@ -572,8 +578,8 @@ module top (
 		red  <= {vga_rgb[5:4],vga_rgb[5:4]};
 		green  <= {vga_rgb[3:2],vga_rgb[3:2]};
 		blue  <= {vga_rgb[1:0],vga_rgb[1:0]};
-		vsync <= vga_vsync_out;
-		hsync <= vga_hsync_out;
+		vsync <= ~vga_vsync_out;
+		hsync <= ~vga_hsync_out;
 		end
 
 	// ------------------------------------------------------------------------------------
