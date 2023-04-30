@@ -149,12 +149,12 @@ wire [15:0] Dtextchar;
 reg [15:0] Dgraph;
 wire [15:0] Ddata;
 wire highres;
-
+wire mono ;
 duplic txt [7:0] (textchar,Dtextchar);
 duplic dta [7:0] (data,Ddata);
 //duplic dta [7:0] (data,Ddata);
 assign highres = (settings==4'hf)|(settings==4'h0);
-
+assign mono = settings[0];
 charGen charmap (
 	.address({data[5:0],char_line}),
 	.dout(textchar)
@@ -193,25 +193,24 @@ always@(posedge clk) begin
 		hor_pos<=0;
 		vert_pos<=0;
 		tvert_pos<=0;
-    invert <=0;
-	end else begin
+		invert <=0;
+	  end 
+	else
+	  begin
 		if (hor_restart) begin
 		    hor_counter <= 0;
-        // multi pix here
 		    if (vert_restart) begin
 		        vert_counter <= 0;
-            // multiline here
-          end
+              end
 		    else 
-          begin
-            vert_counter <= vert_counter + 1;
-            // multiline here
-          end
-		end else begin
+              begin
+                vert_counter <= vert_counter + 1;
+              end
+		  end
+		else
+		  begin
 		    hor_counter <= hor_counter + 1;
-        // multi pix here
-		end	
-		
+		  end	
 		
 		if (hs_start)
 			hor_pos <=0;
@@ -233,28 +232,28 @@ always@(posedge clk) begin
 		end
 
 	    if (next_data)
-        case ({data[7:6],settings})
-          6'b00_0000 : curpixeldat <= Dtextchar; // text mode
-	        6'b10_0000 : curpixeldat <= ~Dtextchar; // text mode
-          6'b01_0000 : curpixeldat <= Dgraph; // text mode blocks
-          6'b11_0000 : curpixeldat <= Dgraph; // text mode blocks
-	        default:  curpixeldat <= highres ?Ddata:{data,8'h00};
-	      endcase
-	    else 
-        if (highres) begin
-          if (hor_counter[0]==1'b1) 
-            curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left	
-        end
-        else
-          if (hor_counter[1:0]==2'b11)
-            curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left
+          case ({data[7:6],settings})
+            6'b00_0000 : curpixeldat <= Dtextchar; // text mode
+            6'b10_0000 : curpixeldat <= ~Dtextchar; // text mode
+            6'b01_0000 : curpixeldat <= Dgraph; // text mode blocks
+            6'b11_0000 : curpixeldat <= Dgraph; // text mode blocks
+            default:  curpixeldat <= mono ?Ddata:{data,8'h00};
+          endcase
+        else 
+          if (highres) begin
+            if (hor_counter[0]==1'b1) 
+              curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left	
+          end
+          else
+            if (hor_counter[1:0]==2'b11)
+              curpixeldat <= {curpixeldat[13:0],2'b00}; //shift_left
 
-    case(curpixeldat[15:14])
-      0:  pixel <= color0;
-      1:  pixel <= color1;
-      2:  pixel <= color2;
-      3:  pixel <= color3;
-    endcase
+	    case(curpixeldat[15:14])
+	      0:  pixel <= color0;
+	      1:  pixel <= color1;
+	      2:  pixel <= color2;
+	      3:  pixel <= color3;
+	    endcase
 
 		bg <= hor_valid & vert_valid; 
 		
@@ -267,10 +266,8 @@ always@(posedge clk) begin
 		   v_sync <=0;
 		else if (vs_stop)
 		   v_sync <=1;
-			
 	end	
 end
-
 
 assign address = (textmode) ? {4'b000,tvert_pos,hor_pos}:{ vert_pos,hor_pos};
 assign hsync = h_sync;

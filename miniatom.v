@@ -15,7 +15,7 @@
 
 `include "vga/vga.v"
 `include "PIA8255/pia8255.v"
-`include "m6522/m6522.v"
+`include "m6522/via6522.v"
 `include "utils/debounce.v"
 /*
    Include the sources from Arlet's 6502 verilog implementation.
@@ -99,7 +99,7 @@ module top (
     output reg [3:0] red,
     output reg [3:0] green,
     output reg [3:0] blue,
-    output reg vgaclk,
+    output vgaclk,
     output vgade,
 	
 	// interface to ATOM keyboard
@@ -118,7 +118,7 @@ module top (
 	output SRAM_nOE,
 	output SRAM_nLB,
 	output SRAM_nUB,
-  output led1,
+  output reg led1,
   input  miso,
   output mosi,
   output ss,
@@ -131,13 +131,28 @@ module top (
   
 );
 
+ reg vgaclk=0;
   // clock signals
   wire fclk;			// 100 MHz clock icoboard
   wire pll_locked;	// signal when pll has reached lock
-  reg reset=1;		// global reset register
+  reg [11:0]rcnt=0;
+  reg hard_reset=0;
+  reg n_hard_reset=0;
+  always@(posedge fclk)
+  begin
+	hard_reset   <= ~rcnt[11];
+	n_hard_reset <= rcnt[11];
+	if(~pll_locked)
+		rcnt<=0;
+	else
+		if(~rcnt[11]) rcnt<=rcnt+1;
+  end
+  
+  
+  //reg reset=0;		// global reset register
 
-  reg clk,vidclk,spiclk;			// 32.5 MHz derived system clock
-	reg boot;
+  reg cpuclk,vidclk;			// 32.5 MHz derived system clocks
+  reg boot;
   wire ready;
   reg phi2_we;
   
@@ -146,7 +161,7 @@ module top (
   
   // reset signals
   wire kbd_reset;
-  wire cpu_reset = kbd_reset | ~pll_locked | boot;
+  wire cpu_reset = kbd_reset | hard_reset | boot;
   wire reboot_req; 
   
   // CPU Bus signals
@@ -154,124 +169,140 @@ module top (
   reg [7:0] D_in;
   wire [7:0] D_out;
   wire W_en;
-  reg wg;
+  reg wg,n_wg;
 
-  reg IRQ,NMI,RDY;  
+  reg IRQ=0,NMI=0,RDY=0;
+  
+  /* 
   // Latched CPU signals  
   reg [15:0] Lcpu_address;
   reg [7:0] LD_out;
   reg LW_en;
+  */
   
   // VGA bus and signals
   wire [12:0] vdu_address;
-  reg [7:0] vid_data;
-  reg [7:0] t_vid_data;
-	wire [5:0] vga_rgb;
-	wire vga_hsync_out,vga_vsync_out;
-     wire [7:0]  via_dout;
-   wire        via_irq_n;
+  reg  [7:0]  vid_data;
+  reg  [7:0]  t_vid_data;
+  wire [5:0]  vga_rgb;
+  wire        vga_hsync_out;
+  wire        vga_vsync_out;
+  wire [7:0]  via_dout;
+  wire        via_irq_n;
   
   // ------------------------------------------------------------------------------------
   // Clock generation
   // ------------------------------------------------------------------------------------
 	
-/* 65 MHz	*/
-    SB_PLL40_CORE #(.FEEDBACK_PATH("SIMPLE"),
-                  .PLLOUT_SELECT("GENCLK"),
-                 /*         
-                    // 120 MHz
-                  .DIVR(4'b0100),		// DIVR =  4
-                  .DIVF(7'b0101111),	// DIVF = 47
-                  .DIVQ(3'b011),		// DIVQ =  3
-                  .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-           
-                 */
-                  // 130 Mhz
-                  .DIVR(4'b0100),		// DIVR =  4
-                  .DIVF(7'b0110011),	// DIVF = 51
-                  .DIVQ(3'b011),		// DIVQ =  3
-                  .FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-                
- /*
-    // 150 MHz
-		.FEEDBACK_PATH("SIMPLE"),
-		.DIVR(4'b0000),		// DIVR =  0
-		.DIVF(7'b0000101),	// DIVF =  5
-		.DIVQ(3'b010),		// DIVQ =  2
-		.FILTER_RANGE(3'b101)	// FILTER_RANGE = 5
+/* 128.125 MHz	*/
+SB_PLL40_CORE #(
+                .FEEDBACK_PATH("SIMPLE"),
+                .DIVR(4'b0011),         // DIVR =  3
+                .DIVF(7'b0101000),      // DIVF = 40
+                .DIVQ(3'b011),          // DIVQ =  3
+                .FILTER_RANGE(3'b010)   // FILTER_RANGE = 2
+        ) uut (
+                .LOCK(pll_locked),
+                .RESETB(1'b1),
+                .BYPASS(1'b0),
+                .REFERENCECLK(pclk),
+                .PLLOUTCORE(fclk)
+                );
 
-    // 160 MHz
-		.FEEDBACK_PATH("SIMPLE"),
-		.DIVR(4'b0100),		// DIVR =  4
-		.DIVF(7'b0011111),	// DIVF = 31
-		.DIVQ(3'b010),		// DIVQ =  2
-		.FILTER_RANGE(3'b010)	// FILTER_RANGE = 2
-*/
 
-                 ) uut (
-                         .REFERENCECLK(pclk),
-                         .PLLOUTCORE(fclk),
-                         //.PLLOUTGLOBAL(clk),
-                         .LOCK(pll_locked),
-                         .RESETB(reset),
-                         .BYPASS(1'b0)
-                        );
 
-	// fclk is 120 MHz
-  // spiclk is 60 Mhz
-  // clk is 30 MHz
-	// vidclk is 30 MHz
+	// fclk is 130 MHz
+	// spiclk is 65 Mhz
+	// clk is 32.5 MHz
+	// vidclk is 32.5 MHz
 
-`ifdef FAST_CPU  
+
   // 30 MHz cpu
-  reg [1:0] cnt;
-  wire [1:0] nxtcnt;
-  assign nxtcnt = cnt +1;
-  reg vga_cycle;
-	always@(posedge fclk) begin
-    spiclk <= ~nxtcnt[0];
-    vgaclk <= ~nxtcnt[0];
-	vidclk <= ~nxtcnt[1];
-    clk <= ~nxtcnt[1] | vga_req ;
-    vga_cycle <= vga_req;
-    // write gate and write cycle
-    wg  <= (~nxtcnt[1])|~(W_en | boot) | vga_req ;
-    phi2_we <= (W_en | boot ) & (~vga_req);
-    cnt<=nxtcnt;
-    if (nxtcnt==0) begin
-      Lcpu_address <= cpu_address;
-      LD_out <= D_out;
-      LW_en <= W_en;
-    end
+  reg ph0 =0;
+  reg ph1 =0;
+  reg ph2 =0;
+  reg ph3 =0;
+  reg latch_cpu;
+  reg latch_vga;
+  reg cpu_window;
+  reg vga_window;
+  reg [18:0] sram_addr;
+  reg sram_noe;
+  reg sram_oe;
+  reg clk_1mhz=0;
+  
+  reg [1:0] phcnt=0;
+  reg [7:0] preload_div=0;
+  
+  `define ALLOW_VGA
+  /*
+  always@(posedge fclk) begin
+	blue[3] <= ph0;
+	vgaclk  <= ph1;
+	blue[0] <= ph2;
+	hsync   <= ph3;
+   end
+   */
+   reg [6:0] once_16=0;
+   always@(posedge cpuclk) begin
+		once_16<=once_16+1;
+		if (once_16==7'd15) begin
+			once_16<=0;
+			clk_1mhz<=~clk_1mhz;
+		end
 	end
-`else
-  // 15Mhz cpu
-  reg [4:0] cnt;
-  wire [4:0] nxtcnt;
-  assign nxtcnt = cnt +1;
-	always@(posedge fclk) begin
-    spiclk <= ~nxtcnt[2];
-	vidclk <= ~nxtcnt[1];
-    clk <= ~nxtcnt[4] ;
-    // write gate and write cycle
-    wg  <= (nxtcnt!=5'b11111)|~(W_en | boot) ;
-    phi2_we <= (nxtcnt[4:1]== 4'b1111) && (W_en | boot );
-    cnt<=nxtcnt;
+
+  reg clk_en=0;
+  reg [7:0] slow_down=0;
+  
+  
+  always@(posedge fclk) begin
+	  phcnt <= phcnt+1;
+      ph0 <= phcnt==2'd0;
+      ph1 <= phcnt==2'd1;
+      ph2 <= phcnt==2'd2;
+      ph3 <= phcnt==2'd3;
+      
+      if (ph3) begin
+		if (slow_down==8'd0) begin
+		 slow_down<=preload_div;
+		 clk_en<=1;
+		end
+		else begin
+		 slow_down<=slow_down+1;
+		 clk_en<=0;
+		end
+      end
+      
+      cpuclk     <= (ph0|ph1);// & clk_en;// | vga_req ;
+      latch_cpu  <= ph0;//& clk_en;
+      cpu_window <= (ph3|ph2);//& clk_en;
+      wg         <= (W_en | boot)&ph3;//& clk_en;
+      n_wg       <= ~((W_en | boot)&ph3);//& clk_en);
+      sram_oe    <= ~((W_en | boot)&(ph2|ph3));//& clk_en);
+      sram_noe   <= (W_en | boot)&(ph2|ph3);//& clk_en;
+      vidclk     <= ph2|ph3;// 180 degree
+      latch_vga  <= ph2;
+      vga_window <= ph0|ph1; 
+      vgaclk     <= ph1|ph3;// 65 MHz
+      
+      sram_addr  <= (ph0|ph1) ? { 6'b000100, vdu_address[12:0] } :
+                            boot ? {2'b00,dma_addr } :
+                            { romwrite,2'b00,cpu_address};
 	end
-`endif
 
   // ------------------------------------------------------------------------------------
   // Main 6502 CPU
   // ------------------------------------------------------------------------------------
 
 	cpu main_cpu(
-	     .clk(clk),
-	     .reset(cpu_reset),
+	     .clk(cpuclk),
+	     .reset(cpu_reset|~spi_ready),
 	     .AB(cpu_address),
 	     .DI(D_in),
 	     .DO(D_out),
 	     .WE(W_en),
-	     .IRQ(!via_irq_n),
+	     .IRQ(via_irq_n),
 	     .NMI(0),
 	     .RDY(1) );
 
@@ -280,24 +311,24 @@ module top (
 	// ------------------------------------------------------------------------------------
 
   wire IO_select;
-	wire PIO_select;
-	wire Extension_select;
-	wire VIA_select;
+  wire PIO_select;
+  wire Extension_select;
+  wire VIA_select;
   wire ROMBank_select;
-	wire VGAIO_select;
-	wire IO_wr;
+  wire VGAIO_select;
+  wire IO_wr;
   wire SDcard_select;
   wire [7:0] IO_out;
 
-	assign IO_select        = (cpu_address[15:12]==4'hB) ? 1 : 0         ; // #BXXX address
-	assign PIO_select       = (cpu_address[11:10]==2'h0) ? IO_select : 0 ; // #B000 - #B3FF is PIO
-	assign Extension_select = (cpu_address[11:10]==2'h1) ? IO_select : 0 ; // #B400 - #B7FF is Extension port
-	assign VIA_select       = (cpu_address[11:10]==2'h2) ? IO_select : 0 ; // #B800 - #BBFF is VIA
-	assign ROMBank_select   = (cpu_address[11:8]==4'hF) ? IO_select : 0 ; // #BF00 - #BFFF is ROMBank_select
-	assign VGAIO_select     = (cpu_address[11:8]==4'hD) ? IO_select : 0 ; // #BD00 - #BDFF is VGAIO
-  assign SDcard_select    = (cpu_address[15: 4] == 12'hbc0);            // #BC00 - #BC0F is SDcard SPI
+  assign IO_select        = (cpu_address[15:12]==4'hB) ? 1 : 0         ; // #BXXX address
+  assign PIO_select       = (cpu_address[11:10]==2'h0) ? IO_select : 0 ; // #B000 - #B3FF is PIO
+  assign Extension_select = (cpu_address[11:10]==2'h1) ? IO_select : 0 ; // #B400 - #B7FF is Extension port
+  assign VIA_select       = (cpu_address[11:8]==4'h8) ? IO_select : 0 ; // #B800 - #BBFF is VIA
+  assign ROMBank_select   = (cpu_address[11:8]==4'hF) ? IO_select : 0 ; // #BF00 - #BFFF is ROMBank_select
+  assign VGAIO_select     = (cpu_address[11:8]==4'hD) ? IO_select : 0 ; // #BD00 - #BDFF is VGAIO
+  assign SDcard_select    = (cpu_address[15:4] == 12'hbc0);            // #BC00 - #BC0F is SDcard SPI
   
-	assign IO_wr = ~wg;
+  assign IO_wr = ~wg;
 
 	// ------------------------------------------------------------------------------------
 	// 	25.5 Input/Output Port Allocations
@@ -341,14 +372,15 @@ module top (
   assign keyboard_row = piaPortA[3:0];
   assign graphics_mode = piaPortA[7:4];
 
-  `pull_up(rept_key,  rept_key_t,		rept_keyp)
-  `pull_up(shift_key, shift_keyt,		shift_keyp)
-  `pull_up(ctrl_key,  ctrl_keyt,		ctrl_keyp)
-  `pull_N_up(key_col,  key_colt,5,		key_colp)
+  `pull_up(rept_key,  rept_key_t,  rept_keyp)
+  `pull_up(shift_key, shift_keyt,  shift_keyp)
+  `pull_up(ctrl_key,  ctrl_keyt,   ctrl_keyp)
   `pull_up(key_reset, key_reset_t, key_reset_p)
 
+  `pull_N_up(key_col, key_colt, 5, key_colp)
+
   PushButton_Debouncer rstkey(
-    .clk(vidclk),
+    .clk(cpuclk),
     .PB(key_reset_p),
     .PB_state(kbd_reset));
   
@@ -373,19 +405,19 @@ module top (
 		endcase
 	end
   
-  assign reboot_req = ~pll_locked | (kbd_reset & ~rept_keyp);  
+  assign reboot_req = kbd_reset & ~rept_keyp;  
   reg [3:0] Chigh;
   always @*
-    Chigh <= {vga_vsync_out, rept_keyp, 2'b00};
+    Chigh <= {~vga_vsync_out, rept_keyp, 2'b00};
 
   // connect PIA to keyboard and VGA generator.
   PIA8255 pia (
-    //.clk(clk),
+    .clk(cpuclk),
     .cs(PIO_select),
     .reset(cpu_reset),
     .address(cpu_address[1:0]),
     .Din(D_out),
-    .we(wg),
+    .we(W_en),
     .PIAout(PIO_out),
     .Port_A(piaPortA),
     .Port_B({shift_keyp, ctrl_keyp, key_colp}),
@@ -396,38 +428,39 @@ module top (
   
 
   wire [7:0] sd_out;
-  assign IO_out = (SDcard_select)? sd_out:
-                  (VIA_select)? via_dout: PIO_out;
+  assign IO_out = (SDcard_select)? sd_out:(VIA_select)?via_dout :PIO_out;
   `pull_up(miso, miso_t, miso_p)
   wire mosi_r;
   assign mosi= mosi_r;
+  wire spi_ready;
   
     spi sdcard
   (
-   .clk(spiclk),
+   .clk(cpuclk),
    .reset(cpu_reset),
    .enable(SDcard_select),
-   .rnw(wg),
+   .rnw(~W_en),
    .addr(cpu_address[2:0]),
    .din(D_out),
    .dout(sd_out),
    .miso(miso_p),
    .mosi(mosi_r),
    .ss(ss),
-   .sclk(sclk)
+   .sclk(sclk),
+   .ready(spi_ready)
    );
    
    // ===============================================================
    // 6522 VIA at 0xB8xx
    // ===============================================================
-
+/*
    m6522 VIA
      (
       .I_RS(cpu_address[3:0]),
       .I_DATA(D_out),
       .O_DATA(via_dout),
       .O_DATA_OE_L(),
-      .I_RW_L(wg),
+      .I_RW_L(~W_en),
       .I_CS1(VIA_select),
       .I_CS2_L(1'b0),
       .O_IRQ_L(via_irq_n),
@@ -447,13 +480,36 @@ module top (
       .I_PB(8'b0),
       .O_PB(),
       .O_PB_OE_L(),
-      .I_P2_H(clk),
+      .I_P2_H(!cpuclk),
       .RESET_L(!cpu_reset),
-      .ENA_4(clk),
-      .CLK(clk)
+      .ENA_4(cpuclk),
+      .CLK(cpuclk)
       );
+*/
+via6522 VIA   (.data_out(via_dout),       // cpu interface
+               .data_in(D_out),
+               .addr(cpu_address[3:0]),
+               .strobe(VIA_select),
+               .we(W_en),
+               .irq(via_irq_n),
+				/*
+               .porta_out,
+               .porta_in,
+               .portb_out,
+               .portb_in,
 
-
+               .ca1_in,
+               .ca2_out,
+               .ca2_in,
+               .cb1_out,
+               .cb1_in,
+               .cb2_out,
+               .cb2_in,
+				*/
+               .slow_clock(clk_1mhz),
+               .clk(vidclk),
+               .reset(cpu_reset)
+       );
   // ------------------------------------------------------------------------------------
   // Bootloader
 	// ------------------------------------------------------------------------------------
@@ -466,13 +522,12 @@ module top (
   reg [31:0]  flash_copy;
   
   icosoc_flashmem flasmem( 
-  .clk(clk),
-  .resetn( pll_locked),
-
-	.valid( flash_valid),
-	.ready( flash_ready),
-	.addr( flash_addr),
-	.rdata( flash_data),
+  .clk(cpuclk),
+  .resetn( n_hard_reset),
+  .valid( flash_valid),
+  .ready( flash_ready),
+  .addr( flash_addr),
+  .rdata( flash_data),
   .spi_cs( SPI_FLASH_CS),
   .spi_sclk(SPI_FLASH_SCLK ),
   .spi_mosi(SPI_FLASH_MOSI ),
@@ -497,8 +552,8 @@ module top (
 `define BL_WRITE4 6
 `define BL_DONE 7
     
-    always@(posedge clk) begin
-      if (~pll_locked) begin
+    always@(posedge cpuclk) begin
+      if (hard_reset) begin
         boot <= 0;
         flash_valid <=0;
         bl_state <= `BL_SETUP;
@@ -510,7 +565,7 @@ module top (
         `BL_IDLE:       begin
                           boot <= 0;
                           flash_valid <=0;
-                          bl_state <= reboot_req ? `BL_SETUP : `BL_IDLE;
+                          if (reboot_req)bl_state <= `BL_SETUP;
                         end
         `BL_SETUP:      begin
                           flash_addr <= 24'h40000;
@@ -525,7 +580,7 @@ module top (
                            bl_state <= `BL_WRITE1;
                         end
         `BL_WRITE1:     begin
-                          boot_we<=1;
+                          // boot_we<=1;
                           boot_data <= flash_copy[7:0];
                           bl_state <= `BL_WRITE2;
                         end
@@ -558,7 +613,7 @@ module top (
 	
 	vga display(
 		.clk( vidclk ),
-		.reset(kbd_reset | ~pll_locked),
+		.reset(cpu_reset),
 		.address(vdu_address),
 		.data(vid_data),
 		.settings(graphics_mode),
@@ -573,23 +628,20 @@ module top (
 	    .Din(D_out)
 		);
 		
-    
+    `ifdef ALLOW_VGA
 	always@(posedge vidclk) begin
-		red  <= {vga_rgb[5:4],vga_rgb[5:4]};
-		green  <= {vga_rgb[3:2],vga_rgb[3:2]};
+		red   <= {vga_rgb[5:4],vga_rgb[5:4]};
+		green <= {vga_rgb[3:2],vga_rgb[3:2]};
 		blue  <= {vga_rgb[1:0],vga_rgb[1:0]};
 		vsync <= ~vga_vsync_out;
 		hsync <= ~vga_hsync_out;
-		end
-
+	end
+`endif
 	// ------------------------------------------------------------------------------------
 	// interlace video and cpu on memory bus (should be okay up to 50 MHz with 100MHz SRAM)
 	// vdu_address and cpu_addres are both latched on clk so this should be fine.
 	// ------------------------------------------------------------------------------------
 
-  reg [1:0] sram_state;
-  wire sram_wrlb, sram_wrub;
-  wire [18:0] sram_addr;
   wire [15:0] sram_dout;
   wire [15:0] sram_din;
 
@@ -598,7 +650,7 @@ module top (
         .PULLUP(1'b 0)
     ) sram_io [15:0] (
         .PACKAGE_PIN(SRAM_D),
-        .OUTPUT_ENABLE(phi2_we),
+        .OUTPUT_ENABLE(sram_noe),
         .D_OUT_0(sram_dout),
         .D_IN_0(sram_din)
     );
@@ -606,21 +658,22 @@ module top (
   // redirect ROM write.
   // Perhaps in future we want to enable dynamic roms
   wire romwrite = W_en & cpu_address[15] & cpu_address[14];//|cpu_address[13]) ;
+  
 
-  assign SRAM_A = vga_req ? { 6'b000100, vdu_address[12:0] } :boot ? {2'b00,dma_addr } :{ romwrite,2'b00,cpu_address};
-  assign SRAM_nCE = 0;
-  assign SRAM_nWE =  wg  ;
-  assign SRAM_nOE = (phi2_we);
-  assign SRAM_nLB = 0;
-  assign SRAM_nUB = 0;
+  assign SRAM_A    = sram_addr;
+  assign SRAM_nCE  = 0;
+  assign SRAM_nWE  = n_wg;
+  assign SRAM_nOE  = sram_noe;
+  assign SRAM_nLB  = 0;
+  assign SRAM_nUB  = 0;
   assign sram_dout = { 8'd0, boot ? boot_data : D_out};
    
-  always@(posedge vidclk) begin
+  always@(posedge latch_vga) begin
     if (vga_req) vid_data <=sram_din[7:0];
   end
    
   // --------- data bus latch ---------
-  always@(posedge clk) begin
+  always@(posedge latch_cpu) begin
     if (IO_select)
       D_in <= IO_out;
     else
@@ -629,7 +682,17 @@ module top (
 
   // shiftlock led  
   reg lock;
-  always@(posedge wg) if (cpu_address == 16'h00E7) lock <= D_out[5];
-  assign led1 = lock;
+  always@(posedge cpuclk) begin
+    if (W_en) begin
+		if (cpu_address == 16'h00E7) lock <= D_out[5];
+		if (cpu_address == 16'hB400) preload_div <= D_out;
+	end
+  end
+  
+  reg [31:0] led_cntr=0;
+  always@(posedge ph0) begin
+	led_cntr<=led_cntr+1;
+	led1 <= cpu_reset;
+  end
 
 endmodule

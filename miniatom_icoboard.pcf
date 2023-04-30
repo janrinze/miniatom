@@ -6,6 +6,7 @@ set_io --warn-no-port led2 F7
 set_io --warn-no-port led3 K9
 
 set_io pclk R9
+set_frequency pclk 100
 
 #set_io reset N11
 #set_io TXD B12

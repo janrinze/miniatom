@@ -8,12 +8,12 @@ FOOTPRINT = ct256
 all: $(PROJ).rpt $(PROJ).bin
 
 %.json: %.v
-	yosys -p 'synth_ice40 -relut -abc2 -top top -json $@' $< |grep arning
+	yosys -p 'synth_ice40 -abc9 -top top -json $@' $< |grep arning
 	#yosys -p 'synth_ice40 -abc2 -top main -json $@' $< |grep arning
 
 %.asc: %.json
-	#nextpnr-ice40 -r --placer heap --timing-allow-fail --opt-timing --pcf $(PIN_DEF) --json $< --asc $@ --$(DEVICE) --package $(FOOTPRINT) --freq $(END_SPEED)
-	nextpnr-ice40 -r --placer heap --timing-allow-fail --pcf $(PIN_DEF) --json $< --asc $@ --$(DEVICE) --package $(FOOTPRINT) --freq $(END_SPEED) --opt-timing
+	#nextpnr-ice40 -r --placer heap --timing-allow-fail --pcf $(PIN_DEF) --json $< --asc $@ --$(DEVICE) --package $(FOOTPRINT) --freq $(END_SPEED)
+	nextpnr-ice40 -r --placer heap --timing-allow-fail --pcf $(PIN_DEF) --json $< --asc $@ --$(DEVICE) --package $(FOOTPRINT) 
 
 %.bin: %.asc
 	icepack -s $< $@

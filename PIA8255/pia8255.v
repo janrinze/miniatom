@@ -1,5 +1,6 @@
 
 module PIA8255 (
+    input clk,
     input cs,
     input reset,
     input [1:0] address,
@@ -53,7 +54,7 @@ module PIA8255 (
   reg [3:0] Port_C_L;
   reg [7:0] PIAout_r;
 
-	always@(posedge we, posedge reset) begin
+	always@(posedge clk, posedge reset) begin
     if (reset) begin
        Port_A_r <= 8'h0;
        Port_C_L <= 4'h0;
@@ -61,7 +62,7 @@ module PIA8255 (
     else
       begin
         // latch writes to PIO
-        if (cs) begin
+        if (cs&we) begin
           case (address[1:0])
             2'b00: Port_A_r <= Din;
             2'b10: Port_C_L <= Din[3:0];

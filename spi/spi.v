@@ -5,9 +5,9 @@
 // 0x03 set cs
 // 0x04 clr cs 
 
-module spi
+module spi 
   (
-   input            clk,
+   input            clk, // 32.5 MHz
    input            reset,
    input            enable,
    input            rnw,
@@ -17,7 +17,8 @@ module spi
    input            miso,
    output reg       mosi,
    output reg       ss,
-   output reg       sclk
+   output reg       sclk,
+   output reg       ready
    );
 
 `define spi_init  5'b00000
@@ -40,15 +41,16 @@ module spi
 `define spi_s16   5'b10001
 `define spi_s17   5'b10010
 
-   reg [4:0] state;
-   reg [7:0] serial_out;
-   reg [7:0] serial_in;
-   reg [17:0] count;
+   reg [4:0] state=0;
+   reg [7:0] serial_out=0;
+   reg [7:0] serial_in=0;
+   reg [7:0] delay=0;
+   reg [7:0] init_count=0;
 
 //------------------------------------------------------------
 // Process Copies SPI port word to appropriate ctrl register
 //------------------------------------------------------------
-   always @(posedge clk, posedge reset)
+   always @(posedge clk)
      begin
         if (reset)
           begin
@@ -57,23 +59,34 @@ module spi
              mosi       <= 1'b1;
              sclk       <= 1'b0;
              serial_out <= 8'hff;
-             count      <= 0;
+             ready      <= 1'b0;
+             init_count <= 0;
+             delay		<= 0;
           end
         else
           begin             
              if (state == `spi_init)
                begin
-                  if (count == 22591) // 2 * 88 * 128 + 63
-                    begin
-                       state <= `spi_s0;
-                       sclk  <= 1'b0;
-                       ss    <= 1'b0;
-                    end
-                  else
-                    begin
-                       sclk  <= count[6]; // 250 KHz
-                       count <= count + 1;
-                    end
+                  // requires 8x8 0xff sent at < 400 kHz.
+                  delay<=delay+1;
+                  if (delay==8'd39) // 250 kHz up/down when fin == 65 MHz
+                  begin
+                    delay<=0;
+                    if (init_count==8'd160) // 2 * 88 * 128 + 63
+                      begin
+                         state <= `spi_s0;
+                         sclk  <= 1'b0;
+                         ss    <= 1'b0;
+                         ready <= 1'b1;
+                         init_count<=0;
+                      end
+                    else
+                      begin
+                         sclk  <= ~sclk; // 400 KHz
+                         init_count <= init_count + 1;
+                         delay<=0;
+                      end
+                  end
                end
              else if (enable && !rnw )
                begin
@@ -115,7 +128,6 @@ module spi
                        mosi       <= 1'b1;
                        sclk       <= 1'b0;
                        serial_out <= 8'hff;
-                       count      <= 0;
                     end
                end
              else
